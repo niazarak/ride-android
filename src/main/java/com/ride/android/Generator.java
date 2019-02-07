@@ -16,6 +16,7 @@ public class Generator {
     public static void main(String[] args) throws IOException {
         // final String input = "(/ (+ 9 6) (% 7 4))";
         // final String input = "(< 5 10)";
+        // final String input = "(== 1 (> 1 2))";
         final String input = "(+ 12 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
@@ -148,22 +149,34 @@ public class Generator {
     static byte[] generate(final Parser.Node node) {
         Document document = new Document();
         Local target = document.getOrCreateLocal(0);
-        generateExpression(document, node, target);
-        return document.compile();
+        Expr expr = generateExpression(document, node, target);
+        if (expr.type == Exception.class) {
+            throw new RuntimeException("Compilation failed");
+        } else {
+            return document.compile();
+        }
     }
 
-    private static void generateExpression(final Document document, final Parser.Node node, final Local target) {
+    private static Expr generateExpression(final Document document, final Parser.Node node, final Local target) {
         if (node instanceof Parser.NumberNode) {
-            generateNumber(document, (Parser.NumberNode) node, target);
+            return generateNumber(document, (Parser.NumberNode) node, target);
         } else if (node instanceof Parser.ListNode) {
-            generateListExpression(document, (Parser.ListNode) node, target);
+            return generateListExpression(document, (Parser.ListNode) node, target);
         } else {
             throw new RuntimeException("Top level symbols not supported");
         }
     }
 
+    static class Expr {
+        private final Object type;
+
+        public Expr(final Object type) {
+            this.type = type;
+        }
+    }
+
     interface ExprGenerator {
-        void run(final Document document, final List<Parser.Node> nodes, final Local target);
+        Expr run(final Document document, final List<Parser.Node> nodes, final Local target);
     }
 
     private static Map<String, ExprGenerator> exprGenerators = new HashMap<>();
@@ -171,95 +184,125 @@ public class Generator {
     static {
         exprGenerators.put("+", (document, nodes, target) -> {
             Local a = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), a);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
             Local b = document.getOrCreateLocal(target.pos + 2);
-            generateExpression(document, nodes.get(2), b);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
             document.add(target, a, b);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("-", (document, nodes, target) -> {
             Local a = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), a);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
             Local b = document.getOrCreateLocal(target.pos + 2);
-            generateExpression(document, nodes.get(2), b);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
             document.subtract(target, a, b);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("*", (document, nodes, target) -> {
             Local a = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), a);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
             Local b = document.getOrCreateLocal(target.pos + 2);
-            generateExpression(document, nodes.get(2), b);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
             document.multiply(target, a, b);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("/", (document, nodes, target) -> {
             Local a = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), a);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
             Local b = document.getOrCreateLocal(target.pos + 2);
-            generateExpression(document, nodes.get(2), b);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
             document.divide(target, a, b);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("%", (document, nodes, target) -> {
             Local a = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), a);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
             Local b = document.getOrCreateLocal(target.pos + 2);
-            generateExpression(document, nodes.get(2), b);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
             document.remainder(target, a, b);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("if", (document, nodes, target) -> {
             Label thenLabel = new Label();
             Label afterLabel = new Label();
             Local ifResult = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(1), ifResult);
+            Expr exprIf = generateExpression(document, nodes.get(1), ifResult);
+            if (exprIf.type != Boolean.class) {
+                return new Expr(Exception.class);
+            }
             // if
             document.compareZ(thenLabel, ifResult);
 
             // else
             Local elseResult = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(2), elseResult);
+            Expr exprElse = generateExpression(document, nodes.get(2), elseResult);
             document.move(target, elseResult);
             document.jump(afterLabel);
 
             // then
             document.markLabel(thenLabel);
             Local thenResult = document.getOrCreateLocal(target.pos + 1);
-            generateExpression(document, nodes.get(3), thenResult);
+            Expr exprThen = generateExpression(document, nodes.get(3), thenResult);
             document.move(target, thenResult);
 
+            if (exprElse.type != Integer.class || !exprElse.type.equals(exprThen.type)) {
+                return new Expr(Exception.class);
+            }
             // after
             document.markLabel(afterLabel);
+            return new Expr(Integer.class);
         });
         exprGenerators.put("!=", (document, nodes, target) -> {
             Comparison comparison = Comparison.NE;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
         exprGenerators.put("==", (document, nodes, target) -> {
             Comparison comparison = Comparison.EQ;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
         exprGenerators.put(">=", (document, nodes, target) -> {
             Comparison comparison = Comparison.GE;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
         exprGenerators.put(">", (document, nodes, target) -> {
             Comparison comparison = Comparison.GT;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
         exprGenerators.put("<=", (document, nodes, target) -> {
             Comparison comparison = Comparison.LE;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
         exprGenerators.put("<", (document, nodes, target) -> {
             Comparison comparison = Comparison.LT;
-            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+            return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
     }
 
-    private static void generateComparison(Document document, Local target, Comparison comparison, Parser.Node nodeA, Parser.Node nodeB) {
+    private static Expr generateComparison(Document document, Local target, Comparison comparison, Parser.Node nodeA, Parser.Node nodeB) {
         Label thenLabel = new Label();
         Label afterLabel = new Label();
         Local a = document.getOrCreateLocal(target.pos + 1);
-        generateExpression(document, nodeA, a);
+        Expr exprA = generateExpression(document, nodeA, a);
         Local b = document.getOrCreateLocal(target.pos + 2);
-        generateExpression(document, nodeB, b);
+        Expr exprB = generateExpression(document, nodeB, b);
+        if (exprA.type != Integer.class || !exprA.type.equals(exprB.type)) {
+            return new Expr(Exception.class);
+        }
         // if
         document.compare(comparison, thenLabel, a, b);
 
@@ -273,9 +316,10 @@ public class Generator {
 
         // after
         document.markLabel(afterLabel);
+        return new Expr(Boolean.class);
     }
 
-    private static void generateListExpression(final Document document, final Parser.ListNode node, final Local target) {
+    private static Expr generateListExpression(final Document document, final Parser.ListNode node, final Local target) {
         if (!(node.getChild(0) instanceof Parser.SymbolNode)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
@@ -283,13 +327,14 @@ public class Generator {
         String symbol = func.symbol;
         ExprGenerator exprGenerator = exprGenerators.get(symbol);
         if (exprGenerator != null) {
-            exprGenerator.run(document, node.getChildren(), target);
+            return exprGenerator.run(document, node.getChildren(), target);
         } else {
             throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
         }
     }
 
-    private static void generateNumber(final Document document, final Parser.NumberNode node, final Local target) {
+    private static Expr generateNumber(final Document document, final Parser.NumberNode node, final Local target) {
         document.load(target, node.number);
+        return new Expr(Integer.class);
     }
 }
