@@ -21,6 +21,9 @@ public class Parser {
         public Node getChild(int i) {
             return nodes.get(i);
         }
+        public List<Node> getChildren() {
+            return nodes;
+        }
 
         @Override
         public String toString() {

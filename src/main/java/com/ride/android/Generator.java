@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Generator {
     // for test purposes
@@ -160,127 +162,130 @@ public class Generator {
         }
     }
 
+    interface ExprGenerator {
+        void run(final Document document, final List<Parser.Node> nodes, final Local target);
+    }
+
+    private static Map<String, ExprGenerator> exprGenerators = new HashMap<>();
+
+    static {
+        exprGenerators.put("+", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            generateExpression(document, nodes.get(2), b);
+            document.add(target, a, b);
+        });
+        exprGenerators.put("-", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            generateExpression(document, nodes.get(2), b);
+            document.subtract(target, a, b);
+        });
+        exprGenerators.put("*", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            generateExpression(document, nodes.get(2), b);
+            document.multiply(target, a, b);
+        });
+        exprGenerators.put("/", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            generateExpression(document, nodes.get(2), b);
+            document.divide(target, a, b);
+        });
+        exprGenerators.put("%", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            generateExpression(document, nodes.get(2), b);
+            document.remainder(target, a, b);
+        });
+        exprGenerators.put("if", (document, nodes, target) -> {
+            Label thenLabel = new Label();
+            Label afterLabel = new Label();
+            Local ifResult = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(1), ifResult);
+            // if
+            document.compareZ(thenLabel, ifResult);
+
+            // else
+            Local elseResult = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(2), elseResult);
+            document.move(target, elseResult);
+            document.jump(afterLabel);
+
+            // then
+            document.markLabel(thenLabel);
+            Local thenResult = document.getOrCreateLocal(target.pos + 1);
+            generateExpression(document, nodes.get(3), thenResult);
+            document.move(target, thenResult);
+
+            // after
+            document.markLabel(afterLabel);
+        });
+        exprGenerators.put("!=", (document, nodes, target) -> {
+            Comparison comparison = Comparison.NE;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+        exprGenerators.put("==", (document, nodes, target) -> {
+            Comparison comparison = Comparison.EQ;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+        exprGenerators.put(">=", (document, nodes, target) -> {
+            Comparison comparison = Comparison.GE;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+        exprGenerators.put(">", (document, nodes, target) -> {
+            Comparison comparison = Comparison.GT;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+        exprGenerators.put("<=", (document, nodes, target) -> {
+            Comparison comparison = Comparison.LE;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+        exprGenerators.put("<", (document, nodes, target) -> {
+            Comparison comparison = Comparison.LT;
+            generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
+        });
+    }
+
+    private static void generateComparison(Document document, Local target, Comparison comparison, Parser.Node nodeA, Parser.Node nodeB) {
+        Label thenLabel = new Label();
+        Label afterLabel = new Label();
+        Local a = document.getOrCreateLocal(target.pos + 1);
+        generateExpression(document, nodeA, a);
+        Local b = document.getOrCreateLocal(target.pos + 2);
+        generateExpression(document, nodeB, b);
+        // if
+        document.compare(comparison, thenLabel, a, b);
+
+        // else
+        document.load(target, 0);
+        document.jump(afterLabel);
+
+        // then
+        document.markLabel(thenLabel);
+        document.load(target, 1);
+
+        // after
+        document.markLabel(afterLabel);
+    }
+
     private static void generateListExpression(final Document document, final Parser.ListNode node, final Local target) {
         if (!(node.getChild(0) instanceof Parser.SymbolNode)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
         Parser.SymbolNode func = (Parser.SymbolNode) node.getChild(0);
-        switch (func.symbol) {
-            case "+": {
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                document.add(target, a, b);
-                break;
-            }
-            case "-": {
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                document.subtract(target, a, b);
-                break;
-            }
-            case "*": {
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                document.multiply(target, a, b);
-                break;
-            }
-            case "/": {
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                document.divide(target, a, b);
-                break;
-            }
-            case "%": {
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                document.remainder(target, a, b);
-                break;
-            }
-            case "if": {
-                Label thenLabel = new Label();
-                Label afterLabel = new Label();
-                Local ifResult = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), ifResult);
-                // if
-                document.compareZ(thenLabel, ifResult);
-
-                // else
-                Local elseResult = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(2), elseResult);
-                document.move(target, elseResult);
-                document.jump(afterLabel);
-
-                // then
-                document.markLabel(thenLabel);
-                Local thenResult = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(3), thenResult);
-                document.move(target, thenResult);
-
-                // after
-                document.markLabel(afterLabel);
-                break;
-            }
-            case "!=":
-            case "==":
-            case ">=":
-            case ">":
-            case "<=":
-            case "<": {
-                Comparison comparison = Comparison.LE;
-                switch (func.symbol) {
-                    case "!=":
-                        comparison = Comparison.NE;
-                        break;
-                    case "==":
-                        comparison = Comparison.EQ;
-                        break;
-                    case ">=":
-                        comparison = Comparison.GE;
-                        break;
-                    case ">":
-                        comparison = Comparison.GT;
-                        break;
-                    case "<=":
-                        comparison = Comparison.LE;
-                        break;
-                    case "<":
-                        comparison = Comparison.LT;
-                        break;
-                }
-                Label thenLabel = new Label();
-                Label afterLabel = new Label();
-                Local a = document.getOrCreateLocal(target.pos + 1);
-                generateExpression(document, node.getChild(1), a);
-                Local b = document.getOrCreateLocal(target.pos + 2);
-                generateExpression(document, node.getChild(2), b);
-                // if
-                document.compare(comparison, thenLabel, a, b);
-
-                // else
-                document.load(target, 0);
-                document.jump(afterLabel);
-
-                // then
-                document.markLabel(thenLabel);
-                document.load(target, 1);
-
-                // after
-                document.markLabel(afterLabel);
-                break;
-            }
-            default: {
-                throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
-            }
+        String symbol = func.symbol;
+        ExprGenerator exprGenerator = exprGenerators.get(symbol);
+        if (exprGenerator != null) {
+            exprGenerator.run(document, node.getChildren(), target);
+        } else {
+            throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
         }
     }
 
