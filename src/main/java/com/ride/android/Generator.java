@@ -17,6 +17,7 @@ public class Generator {
         // final String input = "(/ (+ 9 6) (% 7 4))";
         // final String input = "(< 5 10)";
         // final String input = "(== 1 (> 1 2))";
+        // final String input = "(xor #t 2)";
         final String input = "(+ 12 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
@@ -92,6 +93,18 @@ public class Generator {
             instructions.add(new Instructions.BinaryInstruction(BinaryOp.REMAINDER, dest, a, b));
         }
 
+        void and(Local dest, Local a, Local b) {
+            instructions.add(new Instructions.BinaryInstruction(BinaryOp.AND, dest, a, b));
+        }
+
+        void or(Local dest, Local a, Local b) {
+            instructions.add(new Instructions.BinaryInstruction(BinaryOp.OR, dest, a, b));
+        }
+
+        void xor(Local dest, Local a, Local b) {
+            instructions.add(new Instructions.BinaryInstruction(BinaryOp.XOR, dest, a, b));
+        }
+
         void compare(Comparison comparison, Label trueLabel, Local a, Local b) {
             instructions.add(new Instructions.CompareInstruction(comparison, trueLabel, a, b));
         }
@@ -160,6 +173,8 @@ public class Generator {
     private static Expr generateExpression(final Document document, final Parser.Node node, final Local target) {
         if (node instanceof Parser.NumberNode) {
             return generateNumber(document, (Parser.NumberNode) node, target);
+        } else if (node instanceof Parser.BooleanNode) {
+            return generateBoolean(document, (Parser.BooleanNode) node, target);
         } else if (node instanceof Parser.ListNode) {
             return generateListExpression(document, (Parser.ListNode) node, target);
         } else {
@@ -291,6 +306,40 @@ public class Generator {
             Comparison comparison = Comparison.LT;
             return generateComparison(document, target, comparison, nodes.get(1), nodes.get(2));
         });
+        exprGenerators.put("and", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Boolean.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
+            document.and(target, a, b);
+            return new Expr(Boolean.class);
+        });
+        exprGenerators.put("or", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Boolean.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
+            document.or(target, a, b);
+            return new Expr(Boolean.class);
+        });
+        exprGenerators.put("xor", (document, nodes, target) -> {
+            Local a = document.getOrCreateLocal(target.pos + 1);
+            Expr exprA = generateExpression(document, nodes.get(1), a);
+            Local b = document.getOrCreateLocal(target.pos + 2);
+            Expr exprB = generateExpression(document, nodes.get(2), b);
+            if (exprA.type != Boolean.class || !exprA.type.equals(exprB.type)) {
+                return new Expr(Exception.class);
+            }
+            document.xor(target, a, b);
+            return new Expr(Boolean.class);
+        });
+
     }
 
     private static Expr generateComparison(Document document, Local target, Comparison comparison, Parser.Node nodeA, Parser.Node nodeB) {
@@ -336,5 +385,10 @@ public class Generator {
     private static Expr generateNumber(final Document document, final Parser.NumberNode node, final Local target) {
         document.load(target, node.number);
         return new Expr(Integer.class);
+    }
+
+    private static Expr generateBoolean(final Document document, final Parser.BooleanNode node, final Local target) {
+        document.load(target, node.value ? 1 : 0);
+        return new Expr(Boolean.class);
     }
 }

@@ -48,6 +48,21 @@ public class Parser {
         }
     }
 
+    static class BooleanNode extends Node {
+        final boolean value;
+
+        public BooleanNode(boolean value) {
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return "BooleanNode{" +
+                    "value=" + value +
+                    '}';
+        }
+    }
+
     static class SymbolNode extends Node {
         final String symbol;
 
@@ -86,10 +101,16 @@ public class Parser {
                 Token<Integer> numberToken = t.as(TokenType.NUMBER);
                 NumberNode childNode = new NumberNode(numberToken.getValue());
                 node.addNode(childNode);
+            } else if (t.getType() == TokenType.BOOLEAN) {
+                Token<Boolean> booleanToken = t.as(TokenType.BOOLEAN);
+                BooleanNode childNode = new BooleanNode(booleanToken.getValue());
+                node.addNode(childNode);
             } else if (t.getType() == TokenType.SYMBOL) {
                 Token<String> numberToken = t.as(TokenType.SYMBOL);
                 SymbolNode childNode = new SymbolNode(numberToken.getValue());
                 node.addNode(childNode);
+            } else {
+                throw new RuntimeException("Unknown token: " + t.toString());
             }
             i++;
         }
@@ -122,6 +143,8 @@ public class Parser {
         public static final TokenType<Integer> NUMBER = new TokenType<Integer>("NUMBER") {
         };
         public static final TokenType<String> SYMBOL = new TokenType<String>("SYMBOL") {
+        };
+        public static final TokenType<Boolean> BOOLEAN = new TokenType<Boolean>("BOOLEAN") {
         };
     }
 
@@ -160,12 +183,27 @@ public class Parser {
         return Pattern.compile("\\d+").matcher(rawToken).matches();
     }
 
+    private static boolean isBoolean(final String rawToken) {
+        return Pattern.compile("#[ft]").matcher(rawToken).matches();
+    }
+
     private static boolean isParenOpen(final String rawToken) {
         return rawToken.equals("(");
     }
 
     private static boolean isParenClose(final String rawToken) {
         return rawToken.equals(")");
+    }
+
+    private static boolean parseBoolean(final String rawToken) {
+        switch (rawToken) {
+            case "#t":
+                return true;
+            case "#f":
+                return false;
+            default:
+                throw new IllegalArgumentException("boolean value should be either '#t' or '#f'");
+        }
     }
 
     static List<Token> tokenize(final String input) {
@@ -189,6 +227,8 @@ public class Parser {
                 tokens.add(Token.makeToken(TokenType.PAREN_OPEN, rawToken));
             } else if (isParenClose(rawToken)) {
                 tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, rawToken));
+            } else if (isBoolean(rawToken)) {
+                tokens.add(Token.makeToken(TokenType.BOOLEAN, parseBoolean(rawToken)));
             } else {
                 tokens.add(Token.makeToken(TokenType.SYMBOL, rawToken));
             }
