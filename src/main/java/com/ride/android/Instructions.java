@@ -12,9 +12,9 @@ public class Instructions {
 
     static class BinaryInstruction implements Instruction {
         final BinaryOp op;
-        final Generator.Local dest, a, b;
+        final LocalWrapper dest, a, b;
 
-        BinaryInstruction(BinaryOp op, Generator.Local dest, Generator.Local a, Generator.Local b) {
+        BinaryInstruction(BinaryOp op, LocalWrapper dest, LocalWrapper a, LocalWrapper b) {
             this.op = op;
             this.dest = dest;
             this.a = a;
@@ -28,10 +28,10 @@ public class Instructions {
     }
 
     static class LoadInstruction implements Instruction {
-        final Generator.Local dest;
+        final LocalWrapper dest;
         final int constant;
 
-        LoadInstruction(Generator.Local dest, int constant) {
+        LoadInstruction(LocalWrapper dest, int constant) {
             this.dest = dest;
             this.constant = constant;
         }
@@ -44,10 +44,10 @@ public class Instructions {
 
     static class CompareInstruction implements Instruction {
         final Label label;
-        final Generator.Local a, b;
+        final LocalWrapper a, b;
         final Comparison comparison;
 
-        CompareInstruction(Comparison comparison, Label trueLabel, Generator.Local a, Generator.Local b) {
+        CompareInstruction(Comparison comparison, Label trueLabel, LocalWrapper a, LocalWrapper b) {
             this.label = trueLabel;
             this.a = a;
             this.b = b;
@@ -61,11 +61,11 @@ public class Instructions {
     }
 
     static class CompareZInstruction implements Instruction {
-        final Generator.Local a;
+        final LocalWrapper a;
         final Comparison comparison;
         final Label label;
 
-        CompareZInstruction(Comparison comparison, Label trueLabel, Generator.Local a) {
+        CompareZInstruction(Comparison comparison, Label trueLabel, LocalWrapper a) {
             this.label = trueLabel;
             this.a = a;
             this.comparison = comparison;
