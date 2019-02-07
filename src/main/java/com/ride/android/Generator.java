@@ -27,9 +27,11 @@ public class Generator {
     static class Local<T> {
         private com.android.dx.Local<T> realLocal;
         private TypeId<T> typeId;
+        private int pos;
 
-        public Local(TypeId<T> typeId) {
-            this.typeId = typeId;
+        public Local(int pos) {
+            this.pos = pos;
+            this.typeId = (TypeId<T>) TypeId.INT;
         }
 
         public com.android.dx.Local<T> getRealLocal() {
@@ -42,7 +44,6 @@ public class Generator {
         public void generate(Code code) {
             realLocal = code.newLocal(typeId);
         }
-
     }
 
     static class Document {
@@ -50,16 +51,16 @@ public class Generator {
 
         private List<Instructions.Instruction> instructions = new ArrayList<>();
 
-        Local getOrCreateLocal(final int finalPos, TypeId<Integer> typeId) {
+        Local getOrCreateLocal(final int finalPos) {
             if (locals.size() == finalPos) {
-                Local local = new Local<>(typeId);
+                Local local = new Local<>(finalPos);
                 locals.add(local);
                 return local;
             } else if (finalPos > locals.size()) {
                 throw new RuntimeException("Somehow registers do not increment");
             }
             if (locals.get(finalPos) == null) {
-                locals.set(finalPos, new Local<>(typeId));
+                locals.set(finalPos, new Local<>(finalPos));
             }
             return locals.get(finalPos);
         }
@@ -144,73 +145,86 @@ public class Generator {
 
     static byte[] generate(final Parser.Node node) {
         Document document = new Document();
-        generateExpression(document, node, 0);
+        Local target = document.getOrCreateLocal(0);
+        generateExpression(document, node, target);
         return document.compile();
     }
 
-    private static Local generateExpression(final Document document, final Parser.Node node, final int base) {
+    private static void generateExpression(final Document document, final Parser.Node node, final Local target) {
         if (node instanceof Parser.NumberNode) {
-            return generateNumber(document, (Parser.NumberNode) node, base);
+            generateNumber(document, (Parser.NumberNode) node, target);
         } else if (node instanceof Parser.ListNode) {
-            return generateListExpression(document, (Parser.ListNode) node, base);
+            generateListExpression(document, (Parser.ListNode) node, target);
         } else {
             throw new RuntimeException("Top level symbols not supported");
         }
     }
 
-    private static Local generateListExpression(Document document, Parser.ListNode node, int base) {
+    private static void generateListExpression(final Document document, final Parser.ListNode node, final Local target) {
         if (!(node.getChild(0) instanceof Parser.SymbolNode)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
         Parser.SymbolNode func = (Parser.SymbolNode) node.getChild(0);
-        Local result = document.getOrCreateLocal(base, TypeId.INT);
         switch (func.symbol) {
             case "+": {
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
-                document.add(result, a, b);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
+                document.add(target, a, b);
                 break;
             }
             case "-": {
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
-                document.subtract(result, a, b);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
+                document.subtract(target, a, b);
                 break;
             }
             case "*": {
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
-                document.multiply(result, a, b);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
+                document.multiply(target, a, b);
                 break;
             }
             case "/": {
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
-                document.divide(result, a, b);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
+                document.divide(target, a, b);
                 break;
             }
             case "%": {
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
-                document.remainder(result, a, b);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
+                document.remainder(target, a, b);
                 break;
             }
             case "if": {
                 Label thenLabel = new Label();
                 Label afterLabel = new Label();
-                Local ifResult = generateExpression(document, node.getChild(1), base + 1);
+                Local ifResult = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), ifResult);
                 // if
                 document.compareZ(thenLabel, ifResult);
 
                 // else
-                Local elseResult = generateExpression(document, node.getChild(2), base + 1);
-                document.move(result, elseResult);
+                Local elseResult = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(2), elseResult);
+                document.move(target, elseResult);
                 document.jump(afterLabel);
 
                 // then
                 document.markLabel(thenLabel);
-                Local thenResult = generateExpression(document, node.getChild(3), base + 1);
-                document.move(result, thenResult);
+                Local thenResult = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(3), thenResult);
+                document.move(target, thenResult);
 
                 // after
                 document.markLabel(afterLabel);
@@ -245,18 +259,20 @@ public class Generator {
                 }
                 Label thenLabel = new Label();
                 Label afterLabel = new Label();
-                Local a = generateExpression(document, node.getChild(1), base + 1);
-                Local b = generateExpression(document, node.getChild(2), base + 2);
+                Local a = document.getOrCreateLocal(target.pos + 1);
+                generateExpression(document, node.getChild(1), a);
+                Local b = document.getOrCreateLocal(target.pos + 2);
+                generateExpression(document, node.getChild(2), b);
                 // if
                 document.compare(comparison, thenLabel, a, b);
 
                 // else
-                document.load(result, 0);
+                document.load(target, 0);
                 document.jump(afterLabel);
 
                 // then
                 document.markLabel(thenLabel);
-                document.load(result, 1);
+                document.load(target, 1);
 
                 // after
                 document.markLabel(afterLabel);
@@ -266,12 +282,9 @@ public class Generator {
                 throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
             }
         }
-        return result;
     }
 
-    private static Local generateNumber(Document document, Parser.NumberNode node, int base) {
-        Local result = document.getOrCreateLocal(base, TypeId.INT);
-        document.load(result, node.number);
-        return result;
+    private static void generateNumber(final Document document, final Parser.NumberNode node, final Local target) {
+        document.load(target, node.number);
     }
 }
