@@ -2,28 +2,35 @@ package com.ride.android;
 
 import com.android.dx.*;
 
-import java.io.PrintStream;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class Module {
-    private List<LocalWrapper> locals = new ArrayList<>();
+    private List<Map<TypeId, LocalWrapper>> locals = new ArrayList<>();
 
     private List<Instructions.Instruction> instructions = new ArrayList<>();
 
     LocalWrapper getOrCreateLocal(final int finalPos) {
-        if (locals.size() == finalPos) {
-            LocalWrapper local = new LocalWrapper<>(finalPos);
-            locals.add(local);
-            return local;
-        } else if (finalPos > locals.size()) {
+        return getOrCreateLocal(finalPos, TypeId.INT);
+    }
+
+    LocalWrapper getOrCreateLocal(final int finalPos, final TypeId<?> typeId) {
+        if (finalPos > locals.size()) {
             throw new RuntimeException("Somehow registers do not increment");
+        } else if (locals.size() == finalPos) {
+            LocalWrapper local = new LocalWrapper<>(finalPos, typeId);
+            Map<TypeId, LocalWrapper> localsMap = new HashMap<>();
+            localsMap.put(typeId, local);
+            locals.add(localsMap);
+            return local;
         }
-        if (locals.get(finalPos) == null) {
-            locals.set(finalPos, new LocalWrapper<>(finalPos));
+        if (locals.get(finalPos).get(typeId) == null) {
+            locals.get(finalPos).put(typeId, new LocalWrapper<>(finalPos, typeId));
         }
-        return locals.get(finalPos);
+        return locals.get(finalPos).get(typeId);
     }
 
     void move(LocalWrapper dest, LocalWrapper target) {
@@ -82,8 +89,20 @@ public class Module {
         instructions.add(new Instructions.LoadInstruction(dest, constant));
     }
 
-    TypeId<System> systemType = TypeId.get(System.class);
-    TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
+    void sget(FieldId field, LocalWrapper dest) {
+        instructions.add(code -> code.sget(field, dest.getRealLocal()));
+    }
+
+    void invokeVirtual(MethodId method, LocalWrapper instance, LocalWrapper... args) {
+        instructions.add(code -> {
+            Local[] realArgs = new Local[args.length];
+            for (int i = 0, argsLength = args.length; i < argsLength; i++) {
+                realArgs[i] = args[i].getRealLocal();
+
+            }
+            code.invokeVirtual(method, null, instance.getRealLocal(), realArgs);
+        });
+    }
 
     byte[] compile() {
         DexMaker maker = new DexMaker();
@@ -93,22 +112,16 @@ public class Module {
         MethodId mainMethodType = mainClassType.getMethod(TypeId.VOID, "main", TypeId.get(String[].class));
         Code code = maker.declare(mainMethodType, Modifier.STATIC | Modifier.PUBLIC);
 
-        Local<PrintStream> localSystemOut = code.newLocal(printStreamType);
-
         // System.out.println("Locals to compile:" + locals);
-        for (LocalWrapper local : locals) {
-            local.generate(code);
+        for (Map<TypeId, LocalWrapper> localsMap : locals) {
+            for (LocalWrapper local : localsMap.values()) {
+                local.generate(code);
+            }
         }
         // System.out.println("Insns to compile:" + instructions);
         for (Instructions.Instruction instruction : instructions) {
             instruction.generate(code);
         }
-
-        FieldId<System, PrintStream> systemOutField = systemType.getField(printStreamType, "out");
-        code.sget(systemOutField, localSystemOut);
-        MethodId<PrintStream, Void> printlnMethod = printStreamType.getMethod(
-                TypeId.VOID, "println", TypeId.INT);
-        code.invokeVirtual(printlnMethod, null, localSystemOut, locals.get(0).getRealLocal());
 
         code.returnVoid();
 

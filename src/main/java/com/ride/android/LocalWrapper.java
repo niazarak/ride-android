@@ -8,9 +8,9 @@ public class LocalWrapper<T> {
     private TypeId<T> typeId;
     private int pos;
 
-    public LocalWrapper(int pos) {
+    public LocalWrapper(int pos, TypeId<T> typeId) {
+        this.typeId = typeId;
         this.pos = pos;
-        this.typeId = (TypeId<T>) TypeId.INT;
     }
 
     public com.android.dx.Local<T> getRealLocal() {

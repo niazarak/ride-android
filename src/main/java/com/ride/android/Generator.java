@@ -1,10 +1,10 @@
 package com.ride.android;
 
-import com.android.dx.Comparison;
-import com.android.dx.Label;
+import com.android.dx.*;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +32,19 @@ public class Generator {
         Expr expr = generateExpression(module, node, target);
         if (expr.type == Exception.class) {
             throw new RuntimeException("Compilation failed");
-        } else {
-            return module.compile();
         }
+
+        TypeId<System> systemType = TypeId.get(System.class);
+        TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
+        FieldId<System, PrintStream> systemOutField = systemType.getField(printStreamType, "out");
+        MethodId<PrintStream, Void> printlnMethod = printStreamType.getMethod(
+                TypeId.VOID, "println", TypeId.INT);
+
+        LocalWrapper systemOutLocal = module.getOrCreateLocal(target.getPos() + 1, printStreamType);
+        module.sget(systemOutField, systemOutLocal);
+        module.invokeVirtual(printlnMethod, systemOutLocal, target);
+
+        return module.compile();
     }
 
     private static Expr generateExpression(final Module module, final Parser.Node node, final LocalWrapper target) {
