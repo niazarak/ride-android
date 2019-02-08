@@ -4,6 +4,7 @@
 package com.ride.android;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -21,6 +22,7 @@ public class Parser {
         public Node getChild(int i) {
             return nodes.get(i);
         }
+
         public List<Node> getChildren() {
             return nodes;
         }
@@ -117,10 +119,12 @@ public class Parser {
         return new ParseResult(node, i);
     }
 
-    static Node parse(List<Token> tokens) {
-        Node node = parse(tokens, 0).node.getChild(0);
-        // System.out.println("Parsed node: " + node.toString());
-        return node;
+    static List<Node> parse(List<Token> tokens) {
+        tokens.add(0, Token.makeToken(TokenType.PAREN_OPEN, "("));
+        tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, ")"));
+        List<Node> nodes = ((ListNode) parse(tokens, 0).node.getChild(0)).getChildren();
+        System.out.println("Parsed node: " + nodes.toString());
+        return nodes;
     }
 
 
@@ -216,7 +220,7 @@ public class Parser {
 
 
         // parse into tokens
-        final List<Token> tokens = new ArrayList<>(rawTokens.length);
+        final List<Token> tokens = new LinkedList<>();
         for (final String rawToken : rawTokens) {
             if (rawToken == null || rawToken.isEmpty()) {
                 continue;
@@ -241,7 +245,7 @@ public class Parser {
 
     // for testing purposes
     public static void main(String[] args) {
-        final String input = "(this (is an) (s expression 2))";
+        final String input = "(this (is an) (s expression 2))(and also (this))";
         parse(tokenize(input));
     }
 }

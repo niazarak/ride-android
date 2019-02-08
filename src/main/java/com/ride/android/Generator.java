@@ -16,7 +16,8 @@ public class Generator {
         // final String input = "(< 5 10)";
         // final String input = "(== 1 (> 1 2))";
         // final String input = "(xor #t 2)";
-        final String input = "(+ 12 (if (> 5 10) 1 0))";
+//        final String input = "(+ 12 (if (> 5 10) 1 0))";
+        final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
         byte[] program = generate(Parser.parse(Parser.tokenize(input)));
@@ -26,24 +27,25 @@ public class Generator {
         dexResult.close();
     }
 
-    static byte[] generate(final Parser.Node node) {
+    static byte[] generate(final List<Parser.Node> nodes) {
         Module module = new Module();
-        LocalWrapper target = module.getOrCreateLocal(0);
-        Expr expr = generateExpression(module, node, target);
-        if (expr.type == Exception.class) {
-            throw new RuntimeException("Compilation failed");
+        for (Parser.Node node : nodes) {
+            LocalWrapper target = module.getOrCreateLocal(0);
+            Expr expr = generateExpression(module, node, target);
+            if (expr.type == Exception.class) {
+                throw new RuntimeException("Compilation failed");
+            }
+
+            TypeId<System> systemType = TypeId.get(System.class);
+            TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
+            FieldId<System, PrintStream> systemOutField = systemType.getField(printStreamType, "out");
+            MethodId<PrintStream, Void> printlnMethod = printStreamType.getMethod(
+                    TypeId.VOID, "println", TypeId.INT);
+
+            LocalWrapper systemOutLocal = module.getOrCreateLocal(target.getPos() + 1, printStreamType);
+            module.sget(systemOutField, systemOutLocal);
+            module.invokeVirtual(printlnMethod, systemOutLocal, target);
         }
-
-        TypeId<System> systemType = TypeId.get(System.class);
-        TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
-        FieldId<System, PrintStream> systemOutField = systemType.getField(printStreamType, "out");
-        MethodId<PrintStream, Void> printlnMethod = printStreamType.getMethod(
-                TypeId.VOID, "println", TypeId.INT);
-
-        LocalWrapper systemOutLocal = module.getOrCreateLocal(target.getPos() + 1, printStreamType);
-        module.sget(systemOutField, systemOutLocal);
-        module.invokeVirtual(printlnMethod, systemOutLocal, target);
-
         return module.compile();
     }
 
