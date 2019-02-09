@@ -123,7 +123,7 @@ public class Parser {
         tokens.add(0, Token.makeToken(TokenType.PAREN_OPEN, "("));
         tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, ")"));
         List<Node> nodes = ((ListNode) parse(tokens, 0).node.getChild(0)).getChildren();
-        System.out.println("Parsed node: " + nodes.toString());
+        // System.out.println("Parsed node: " + nodes.toString());
         return nodes;
     }
 
