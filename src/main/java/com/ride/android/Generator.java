@@ -13,7 +13,7 @@ public class Generator {
         // final String input = "(/ (+ 9 6) (% 7 4))";
         // final String input = "(< 5 10)";
         // final String input = "(== 1 (> 1 2))";
-        // final String input = "(xor #t 2)";
+        // final String input = "(xor #t #f)";
         // final String input = "(+ 12 (if (> 5 10) 1 0))";
         // final String input = "(define (funA a) (+ a 7)) (define (funB b) (- b (funA 2))) (funB 2)";
         final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
@@ -30,8 +30,105 @@ public class Generator {
         private LinkedList<Map<String, EnvironmentEntry>> frames = new LinkedList<>();
 
         public Environment() {
-            Map<String, EnvironmentEntry> baseEnvironment = new HashMap<String, EnvironmentEntry>() {{
-            }};
+            Map<String, EnvironmentEntry> baseEnvironment = new HashMap<>();
+            baseEnvironment.put("+", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.add(target, args[0], args[1]);
+                    return new Expr(Type.INTEGER);
+                }
+            });
+            baseEnvironment.put("-", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.subtract(target, args[0], args[1]);
+                    return new Expr(Type.INTEGER);
+                }
+            });
+            baseEnvironment.put("*", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.multiply(target, args[0], args[1]);
+                    return new Expr(Type.INTEGER);
+                }
+            });
+            baseEnvironment.put("/", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.divide(target, args[0], args[1]);
+                    return new Expr(Type.INTEGER);
+                }
+            });
+            baseEnvironment.put("%", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.remainder(target, args[0], args[1]);
+                    return new Expr(Type.INTEGER);
+                }
+            });
+            baseEnvironment.put("!=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.NE;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put("==", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.EQ;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put(">=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.GE;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put(">", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.GT;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put("<=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.LE;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put("<", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    Comparison comparison = Comparison.LT;
+                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
+                }
+            });
+            baseEnvironment.put("and", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.and(target, args[0], args[1]);
+                    return new Expr(Type.BOOLEAN);
+                }
+            });
+            baseEnvironment.put("or", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.or(target, args[0], args[1]);
+                    return new Expr(Type.BOOLEAN);
+                }
+            });
+            baseEnvironment.put("xor", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+                @Override
+                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                    functionCode.xor(target, args[0], args[1]);
+                    return new Expr(Type.BOOLEAN);
+                }
+            });
             frames.add(baseEnvironment);
         }
 
@@ -185,7 +282,11 @@ public class Generator {
         Type getType();
     }
 
-    static class FunctionEntry implements EnvironmentEntry {
+    interface ApplicableEnvironmentEntry extends EnvironmentEntry {
+        Expr apply(final FunctionCode functionCode, LocalWrapper target, LocalWrapper... args);
+    }
+
+    static class FunctionEntry implements ApplicableEnvironmentEntry {
         private final TypeFunction type;
         private final MethodId methodId;
 
@@ -199,8 +300,23 @@ public class Generator {
             return type;
         }
 
-        public MethodId getMethodId() {
-            return methodId;
+        @Override
+        public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+            functionCode.call(methodId, target, args);
+            return new Expr(Type.INTEGER);
+        }
+    }
+
+    static abstract class OperatorEntry implements ApplicableEnvironmentEntry {
+        private final TypeFunction type;
+
+        OperatorEntry(TypeFunction type) {
+            this.type = type;
+        }
+
+        @Override
+        public Type getType() {
+            return type;
         }
     }
 
@@ -219,174 +335,10 @@ public class Generator {
         }
     }
 
-
-    interface ExprGenerator {
-        Expr run(final FunctionCode functionCode,
-                 final List<Parser.Node> nodes,
-                 final LocalWrapper target,
-                 final Environment environment);
-    }
-
-    private static Map<String, ExprGenerator> exprGenerators = new HashMap<>();
-
-    static {
-        exprGenerators.put("+", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.add(target, a, b);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("-", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.subtract(target, a, b);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("*", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.multiply(target, a, b);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("/", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.divide(target, a, b);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("%", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.remainder(target, a, b);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("if", (functionCode, nodes, target, environment) -> {
-            Label thenLabel = new Label();
-            Label afterLabel = new Label();
-            LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprIf = generateExpression(functionCode, nodes.get(1), ifResult, environment);
-            if (exprIf.type != Type.BOOLEAN) {
-                return new Expr(Type.EXCEPTION);
-            }
-            // if
-            functionCode.compareZ(thenLabel, ifResult);
-
-            // else
-            LocalWrapper elseResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprElse = generateExpression(functionCode, nodes.get(2), elseResult, environment);
-            functionCode.move(target, elseResult);
-            functionCode.jump(afterLabel);
-
-            // then
-            functionCode.markLabel(thenLabel);
-            LocalWrapper thenResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprThen = generateExpression(functionCode, nodes.get(3), thenResult, environment);
-            functionCode.move(target, thenResult);
-
-            if (exprElse.type != Type.INTEGER || !exprElse.type.equals(exprThen.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            // after
-            functionCode.markLabel(afterLabel);
-            return new Expr(Type.INTEGER);
-        });
-        exprGenerators.put("!=", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.NE;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put("==", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.EQ;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put(">=", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.GE;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put(">", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.GT;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put("<=", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.LE;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put("<", (functionCode, nodes, target, environment) -> {
-            Comparison comparison = Comparison.LT;
-            return generateComparison(functionCode, target, comparison, nodes.get(1), nodes.get(2), environment);
-        });
-        exprGenerators.put("and", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.BOOLEAN || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.and(target, a, b);
-            return new Expr(Type.BOOLEAN);
-        });
-        exprGenerators.put("or", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.BOOLEAN || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.or(target, a, b);
-            return new Expr(Type.BOOLEAN);
-        });
-        exprGenerators.put("xor", (functionCode, nodes, target, environment) -> {
-            LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-            Expr exprA = generateExpression(functionCode, nodes.get(1), a, environment);
-            LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-            Expr exprB = generateExpression(functionCode, nodes.get(2), b, environment);
-            if (exprA.type != Type.BOOLEAN || !exprA.type.equals(exprB.type)) {
-                return new Expr(Type.EXCEPTION);
-            }
-            functionCode.xor(target, a, b);
-            return new Expr(Type.BOOLEAN);
-        });
-    }
-
     private static Expr generateComparison(FunctionCode functionCode, LocalWrapper target,
-                                           Comparison comparison,
-                                           Parser.Node nodeA, Parser.Node nodeB,
-                                           Environment environment) {
+                                           Comparison comparison, LocalWrapper a, LocalWrapper b) {
         Label thenLabel = new Label();
         Label afterLabel = new Label();
-        LocalWrapper a = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprA = generateExpression(functionCode, nodeA, a, environment);
-        LocalWrapper b = functionCode.getOrCreateLocal(target.getPos() + 2);
-        Expr exprB = generateExpression(functionCode, nodeB, b, environment);
-        if (exprA.type != Type.INTEGER || !exprA.type.equals(exprB.type)) {
-            return new Expr(Type.EXCEPTION);
-        }
         // if
         functionCode.compare(comparison, thenLabel, a, b);
 
@@ -403,6 +355,43 @@ public class Generator {
         return new Expr(Type.BOOLEAN);
     }
 
+    public static Expr generateIf(final FunctionCode functionCode,
+                                  final List<Parser.Node> nodes,
+                                  final LocalWrapper target,
+                                  final Environment environment) {
+        Label thenLabel = new Label();
+        Label afterLabel = new Label();
+
+        LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
+        Expr exprIf = generateExpression(functionCode, nodes.get(1), ifResult, environment);
+        if (exprIf.type != Type.BOOLEAN) {
+            return new Expr(Type.EXCEPTION);
+        }
+        // if
+        functionCode.compareZ(thenLabel, ifResult);
+
+        // else
+        LocalWrapper elseResult = functionCode.getOrCreateLocal(target.getPos() + 1);
+        Expr exprElse = generateExpression(functionCode, nodes.get(2), elseResult, environment);
+        functionCode.move(target, elseResult);
+        functionCode.jump(afterLabel);
+
+        // then
+        functionCode.markLabel(thenLabel);
+        LocalWrapper thenResult = functionCode.getOrCreateLocal(target.getPos() + 1);
+        Expr exprThen = generateExpression(functionCode, nodes.get(3), thenResult, environment);
+        functionCode.move(target, thenResult);
+
+        if (exprElse.type != Type.INTEGER || !exprElse.type.equals(exprThen.type)) {
+            return new Expr(Type.EXCEPTION);
+        }
+
+        // after
+        functionCode.markLabel(afterLabel);
+        return new Expr(Type.INTEGER);
+    }
+
+
     private static Expr generateListExpression(final FunctionCode functionCode,
                                                final Parser.ListNode node,
                                                final LocalWrapper target,
@@ -412,33 +401,32 @@ public class Generator {
         }
         Parser.SymbolNode func = (Parser.SymbolNode) node.getChild(0);
         String symbol = func.symbol;
+
+        if (symbol.equals("if")) {
+            return generateIf(functionCode, node.getChildren(), target, environment);
+        }
+
         // check if function call
         EnvironmentEntry lookedUpEntry = environment.lookup(symbol);
         if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TypeFunction) {
-            FunctionEntry functionEntry = (FunctionEntry) lookedUpEntry;
-            int argsCount = ((FunctionEntry) lookedUpEntry).getMethodId().getParameters().size();
+            ApplicableEnvironmentEntry functionEntry = (ApplicableEnvironmentEntry) lookedUpEntry;
+            TypeFunction functionEntryType = (TypeFunction) functionEntry.getType();
+            int argsCount = functionEntryType.inputTypes.size();
             LocalWrapper[] args = new LocalWrapper[argsCount];
             for (int i = 0; i < argsCount; i++) {
                 LocalWrapper argLocalWrapper = functionCode.getOrCreateLocal(target.getPos() + i + 1);
                 Expr argExpr = generateExpression(functionCode, node.getChild(i + 1), argLocalWrapper, environment);
-                if (argExpr.type != Type.INTEGER) {
+                if (argExpr.type != functionEntryType.inputTypes.get(i)) {
                     return new Expr(Type.EXCEPTION);
                 }
                 args[i] = argLocalWrapper;
             }
-            functionCode.call(functionEntry.getMethodId(), target, args);
-            return new Expr(Type.INTEGER);
+            return functionEntry.apply(functionCode, target, args);
         } else if (lookedUpEntry != null) {
             // this should never happen
             throw new RuntimeException("Symbol is not callable \"" + func.symbol + "\"");
         } else {
-            // else do smth
-            ExprGenerator exprGenerator = exprGenerators.get(symbol);
-            if (exprGenerator != null) {
-                return exprGenerator.run(functionCode, node.getChildren(), target, environment);
-            } else {
-                throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
-            }
+            throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
         }
     }
 
