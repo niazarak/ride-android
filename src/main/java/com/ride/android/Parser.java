@@ -122,7 +122,11 @@ public class Parser {
     static List<Node> parse(List<Token> tokens) {
         tokens.add(0, Token.makeToken(TokenType.PAREN_OPEN, "("));
         tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, ")"));
-        List<Node> nodes = ((ListNode) parse(tokens, 0).node.getChild(0)).getChildren();
+        ParseResult parseResult = parse(tokens, 0);
+        if (parseResult.offset != tokens.size()) {
+            throw new RuntimeException("Invalid syntax");
+        }
+        List<Node> nodes = ((ListNode) parseResult.node.getChild(0)).getChildren();
         // System.out.println("Parsed node: " + nodes.toString());
         return nodes;
     }

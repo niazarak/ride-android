@@ -221,9 +221,9 @@ public class Generator {
 
         // register function
         environment.pop();
-        List<Type> exprParams = new ArrayList<>();
-        Collections.fill(exprParams, Type.INTEGER);
-        environment.add(name.symbol, new FunctionEntry(new TypeFunction(Type.INTEGER, exprParams),
+        Type[] exprParams = new Type[paramsCount];
+        Arrays.fill(exprParams, Type.INTEGER);
+        environment.add(name.symbol, new FunctionEntry(new TypeFunction(Type.INTEGER, Arrays.asList(exprParams)),
                 functionCode.getMethodId()));
     }
 
