@@ -5,7 +5,8 @@ import com.android.dx.*;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
 
 public class Generator {
     // for test purposes
@@ -26,138 +27,9 @@ public class Generator {
         dexResult.close();
     }
 
-    static class Environment {
-        private LinkedList<Map<String, EnvironmentEntry>> frames = new LinkedList<>();
-
-        public Environment() {
-            Map<String, EnvironmentEntry> baseEnvironment = new HashMap<>();
-            baseEnvironment.put("+", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.add(target, args[0], args[1]);
-                    return new Expr(Type.INTEGER);
-                }
-            });
-            baseEnvironment.put("-", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.subtract(target, args[0], args[1]);
-                    return new Expr(Type.INTEGER);
-                }
-            });
-            baseEnvironment.put("*", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.multiply(target, args[0], args[1]);
-                    return new Expr(Type.INTEGER);
-                }
-            });
-            baseEnvironment.put("/", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.divide(target, args[0], args[1]);
-                    return new Expr(Type.INTEGER);
-                }
-            });
-            baseEnvironment.put("%", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.remainder(target, args[0], args[1]);
-                    return new Expr(Type.INTEGER);
-                }
-            });
-            baseEnvironment.put("!=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.NE;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put("==", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.EQ;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put(">=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.GE;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put(">", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.GT;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put("<=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.LE;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put("<", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    Comparison comparison = Comparison.LT;
-                    return generateComparison(functionCode, target, comparison, args[0], args[1]);
-                }
-            });
-            baseEnvironment.put("and", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.and(target, args[0], args[1]);
-                    return new Expr(Type.BOOLEAN);
-                }
-            });
-            baseEnvironment.put("or", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.or(target, args[0], args[1]);
-                    return new Expr(Type.BOOLEAN);
-                }
-            });
-            baseEnvironment.put("xor", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
-                @Override
-                public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                    functionCode.xor(target, args[0], args[1]);
-                    return new Expr(Type.BOOLEAN);
-                }
-            });
-            frames.add(baseEnvironment);
-        }
-
-        public void push() {
-            frames.add(new HashMap<>());
-        }
-
-        public void add(String name, EnvironmentEntry entry) {
-            frames.getLast().put(name, entry);
-        }
-
-        public void pop() {
-            frames.removeLast();
-        }
-
-        public EnvironmentEntry lookup(String symbol) {
-            ListIterator<Map<String, EnvironmentEntry>> iterator = frames.listIterator(frames.size());
-            while (iterator.hasPrevious()) {
-                Map<String, EnvironmentEntry> frame = iterator.previous();
-                if (frame.get(symbol) != null) {
-                    return frame.get(symbol);
-                }
-            }
-            return null;
-        }
-    }
-
     static byte[] generate(final List<Parser.Node> nodes) {
         Environment environment = new Environment();
+        initBuiltins(environment);
 
         Module megaModule = new Module();
 
@@ -461,5 +333,106 @@ public class Generator {
                                         final LocalWrapper target) {
         functionCode.load(target, node.value ? 1 : 0);
         return new Expr(Type.BOOLEAN);
+    }
+
+    private static void initBuiltins(final Environment baseEnvironment) {
+        baseEnvironment.add("+", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.add(target, args[0], args[1]);
+                return new Expr(Type.INTEGER);
+            }
+        });
+        baseEnvironment.add("-", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.subtract(target, args[0], args[1]);
+                return new Expr(Type.INTEGER);
+            }
+        });
+        baseEnvironment.add("*", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.multiply(target, args[0], args[1]);
+                return new Expr(Type.INTEGER);
+            }
+        });
+        baseEnvironment.add("/", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.divide(target, args[0], args[1]);
+                return new Expr(Type.INTEGER);
+            }
+        });
+        baseEnvironment.add("%", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.remainder(target, args[0], args[1]);
+                return new Expr(Type.INTEGER);
+            }
+        });
+        baseEnvironment.add("!=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.NE;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add("==", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.EQ;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add(">=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.GE;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add(">", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.GT;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add("<=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.LE;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add("<", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                Comparison comparison = Comparison.LT;
+                return generateComparison(functionCode, target, comparison, args[0], args[1]);
+            }
+        });
+        baseEnvironment.add("and", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.and(target, args[0], args[1]);
+                return new Expr(Type.BOOLEAN);
+            }
+        });
+        baseEnvironment.add("or", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.or(target, args[0], args[1]);
+                return new Expr(Type.BOOLEAN);
+            }
+        });
+        baseEnvironment.add("xor", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+            @Override
+            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
+                functionCode.xor(target, args[0], args[1]);
+                return new Expr(Type.BOOLEAN);
+            }
+        });
     }
 }
