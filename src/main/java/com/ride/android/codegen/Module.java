@@ -1,4 +1,4 @@
-package com.ride.android;
+package com.ride.android.codegen;
 
 import com.android.dx.Code;
 import com.android.dx.DexMaker;

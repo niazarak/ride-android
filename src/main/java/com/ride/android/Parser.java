@@ -4,252 +4,324 @@
 package com.ride.android;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 public class Parser {
-    static class Node {
+    public static class Expression {
     }
 
-    static class ListNode extends Node {
-        private final List<Node> nodes = new ArrayList<>();
+    public static class Application extends Expression {
+        private final List<Expression> args;
+        private Expression function;
 
-        public void addNode(Node node) {
-            nodes.add(node);
+        public Application(Expression function, List<Expression> args) {
+            this.function = function;
+            this.args = args;
         }
 
-        public Node getChild(int i) {
-            return nodes.get(i);
+        public Expression getFunction() {
+            return function;
         }
 
-        public List<Node> getChildren() {
-            return nodes;
+        public Expression getArg(int i) {
+            return args.get(i);
+        }
+
+        public List<Expression> getArgs() {
+            return args;
         }
 
         @Override
         public String toString() {
-            return "ListNode{" +
-                    "nodes=" + nodes +
+            return "App{" +
+                    "function=" + function +
+                    ", args=" + args +
                     '}';
         }
     }
 
-    static class NumberNode extends Node {
-        final int number;
+    public static class Definition extends Expression {
+        private final String name;
+        private final List<String> args;
+        private final Expression body;
 
-        public NumberNode(int number) {
+        public Definition(String name, List<String> args, Expression body) {
+            this.name = name;
+            this.args = args;
+            this.body = body;
+        }
+
+        @Override
+        public String toString() {
+            return "Def{" +
+                    "name='" + name + '\'' +
+                    ", args=" + args +
+                    ", body=" + body +
+                    '}';
+        }
+    }
+
+    public static class Lambda extends Expression {
+        private final List<String> args;
+        private final Expression body;
+
+        public Lambda(List<String> args, Expression body) {
+            this.args = args;
+            this.body = body;
+        }
+
+        @Override
+        public String toString() {
+            return "Lambda{" +
+                    "args=" + args +
+                    ", body=" + body +
+                    '}';
+        }
+    }
+
+    public static class IfExpr extends Expression {
+        final Expression condition, ifBranch, elseBranch;
+
+        public IfExpr(Expression condition, Expression ifBranch, Expression elseBranch) {
+            this.condition = condition;
+            this.ifBranch = ifBranch;
+            this.elseBranch = elseBranch;
+        }
+
+        @Override
+        public String toString() {
+            return "IfExpr{" +
+                    "condition=" + condition +
+                    ", ifBranch=" + ifBranch +
+                    ", elseBranch=" + elseBranch +
+                    '}';
+        }
+    }
+
+    public static class Int extends Expression {
+        public final int number;
+
+        public Int(int number) {
             this.number = number;
         }
 
         @Override
         public String toString() {
-            return "NumberNode{" +
-                    "number=" + number +
-                    '}';
+            return "Int{" + number + '}';
         }
     }
 
-    static class BooleanNode extends Node {
-        final boolean value;
+    public static class Bool extends Expression {
+        public final boolean value;
 
-        public BooleanNode(boolean value) {
+        public Bool(boolean value) {
             this.value = value;
         }
 
         @Override
         public String toString() {
-            return "BooleanNode{" +
-                    "value=" + value +
-                    '}';
+            return "Bool{" + value + '}';
         }
     }
 
-    static class SymbolNode extends Node {
-        final String symbol;
+    public static class ListExpr extends Expression {
+        List<Expression> expressions = new ArrayList<>();
 
-        public SymbolNode(String symbol) {
-            this.symbol = symbol;
+        void add(Expression expression) {
+            expressions.add(expression);
+        }
+
+        List<Expression> getAll() {
+            return expressions;
         }
 
         @Override
         public String toString() {
-            return "SymbolNode{" +
-                    "symbol='" + symbol + '\'' +
+            return "ListExpr{" +
+                    "expressions=" + expressions +
                     '}';
+        }
+
+        Expression get(int i) {
+            return expressions.get(i);
+        }
+    }
+
+    public static class Variable extends Expression {
+        public final String name;
+
+        public Variable(String symbol) {
+            this.name = symbol;
+        }
+
+        @Override
+        public String toString() {
+            return "Var{" + name + '}';
         }
     }
 
     static class ParseResult {
-        final ListNode node;
+        final ListExpr node;
         final int offset;
 
-        ParseResult(ListNode node, int offset) {
-            this.node = node;
+        ParseResult(ListExpr expr, int offset) {
+            this.node = expr;
             this.offset = offset;
         }
     }
 
-    private static ParseResult parse(List<Token> tokens, int offset) {
-        ListNode node = new ListNode();
+    private static ParseResult parse(List<Tokenizer.Token> tokens, int offset, int depth) {
+        ListExpr list = new ListExpr();
         int i = offset;
-        while (i < tokens.size() && tokens.get(i).getType() != TokenType.PAREN_CLOSE) {
-            Token<?> t = tokens.get(i);
-            if (t.getType() == TokenType.PAREN_OPEN) {
-                ParseResult childResult = parse(tokens, i + 1);
+        while (i < tokens.size() && tokens.get(i).getType() != Tokenizer.TokenType.PAREN_CLOSE) {
+            Tokenizer.Token<?> t = tokens.get(i);
+            if (t.getType() == Tokenizer.TokenType.PAREN_OPEN) {
+                ParseResult childResult = parse(tokens, i + 1, depth + 1);
                 i = childResult.offset;
-                node.addNode(childResult.node);
-            } else if (t.getType() == TokenType.NUMBER) {
-                Token<Integer> numberToken = t.as(TokenType.NUMBER);
-                NumberNode childNode = new NumberNode(numberToken.getValue());
-                node.addNode(childNode);
-            } else if (t.getType() == TokenType.BOOLEAN) {
-                Token<Boolean> booleanToken = t.as(TokenType.BOOLEAN);
-                BooleanNode childNode = new BooleanNode(booleanToken.getValue());
-                node.addNode(childNode);
-            } else if (t.getType() == TokenType.SYMBOL) {
-                Token<String> numberToken = t.as(TokenType.SYMBOL);
-                SymbolNode childNode = new SymbolNode(numberToken.getValue());
-                node.addNode(childNode);
+                list.add(childResult.node);
+            } else if (t.getType() == Tokenizer.TokenType.NUMBER) {
+                Tokenizer.Token<Integer> numberToken = t.as(Tokenizer.TokenType.NUMBER);
+                Int childNode = new Int(numberToken.getValue());
+                list.add(childNode);
+            } else if (t.getType() == Tokenizer.TokenType.BOOLEAN) {
+                Tokenizer.Token<Boolean> booleanToken = t.as(Tokenizer.TokenType.BOOLEAN);
+                Bool childNode = new Bool(booleanToken.getValue());
+                list.add(childNode);
+            } else if (t.getType() == Tokenizer.TokenType.SYMBOL) {
+                Tokenizer.Token<String> symbolToken = t.as(Tokenizer.TokenType.SYMBOL);
+                String symbol = symbolToken.getValue();
+
+                Variable childNode = new Variable(symbol);
+                list.add(childNode);
+
             } else {
                 throw new RuntimeException("Unknown token: " + t.toString());
             }
             i++;
         }
-        return new ParseResult(node, i);
+        return new ParseResult(list, i);
     }
 
-    static List<Node> parse(List<Token> tokens) {
-        tokens.add(0, Token.makeToken(TokenType.PAREN_OPEN, "("));
-        tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, ")"));
-        ParseResult parseResult = parse(tokens, 0);
+    private static Expression transform(Expression expr, int depth) {
+        if (!(expr instanceof ListExpr)) {
+            // basic stuff
+            return expr;
+        }
+        ListExpr listExpr = (ListExpr) expr;
+        if (listExpr.getAll().isEmpty()) {
+            throw new RuntimeException("Empty list expression");
+        }
+
+        // check first expr
+        Expression firstExpr = listExpr.get(0);
+        if (firstExpr instanceof Variable) {
+            Variable firstVar = (Variable) firstExpr;
+            switch (firstVar.name) {
+                case "define": {
+                    return transformToDefine(listExpr, depth);
+                }
+                case "lambda": {
+                    return transformToLambda(listExpr, depth);
+                }
+                case "if": {
+                    return transformToIf(listExpr, depth);
+                }
+                default: {
+                    return transformToApplication(listExpr, depth);
+                }
+            }
+        } else if (firstExpr instanceof ListExpr) {
+            return transformToApplication(listExpr, depth);
+        }
+        return expr;
+    }
+
+    private static Expression transformToApplication(ListExpr listExpr, int depth) {
+        List<Expression> args = new ArrayList<>();
+        for (int i = 1; i < listExpr.getAll().size(); i++) {
+            args.add(transform(listExpr.get(i), depth + 1));
+        }
+        return new Application(transform(listExpr.get(0), depth + 1), args);
+    }
+
+    private static IfExpr transformToIf(ListExpr expr, int depth) {
+        if (expr.getAll().size() != 3) {
+            throw new RuntimeException("Incorrect condition: should have 3 children");
+        }
+
+        return new IfExpr(
+                transform(expr.get(1), depth + 1),
+                transform(expr.get(2), depth + 1),
+                transform(expr.get(3), depth + 1)
+        );
+    }
+
+    private static Definition transformToDefine(ListExpr expr, int depth) {
+        if (depth != 0) {
+            throw new RuntimeException("Incorrect definition: should be top-level declaration");
+        }
+        if (expr.getAll().size() != 3) {
+            throw new RuntimeException("Incorrect definition: should have 3 children");
+        }
+        if (!(expr.get(1) instanceof ListExpr)) {
+            throw new RuntimeException("Incorrect definition: should specify contract in list");
+        }
+        ListExpr contract = (ListExpr) expr.get(1);
+        if (!(contract.get(0) instanceof Variable)) {
+            throw new RuntimeException("Incorrect definition: function name should be a symbol");
+        }
+        String name = ((Variable) contract.get(0)).name;
+        List<String> args = new ArrayList<>();
+        for (int i = 1; i < contract.getAll().size(); i++) {
+            if (!(contract.get(i) instanceof Variable)) {
+                throw new RuntimeException("Incorrect definition: function arg should be a symbol");
+            }
+            Variable arg = (Variable) contract.get(i);
+            args.add(arg.name);
+        }
+        return new Definition(name, args, transform(expr.get(2), depth + 1));
+    }
+
+    private static Lambda transformToLambda(ListExpr expr, int depth) {
+        if (expr.getAll().size() != 3) {
+            throw new RuntimeException("Incorrect lambda: should have 3 children");
+        }
+        if (!(expr.get(1) instanceof ListExpr)) {
+            throw new RuntimeException("Incorrect lambda: should specify contract in list");
+        }
+        ListExpr contract = (ListExpr) expr.get(1);
+        List<String> args = new ArrayList<>();
+        for (int i = 0; i < contract.getAll().size(); i++) {
+            if (!(contract.get(i) instanceof Variable)) {
+                throw new RuntimeException("Incorrect lambda: function arg should be a symbol");
+            }
+            Variable arg = (Variable) contract.get(i);
+            args.add(arg.name);
+        }
+        return new Lambda(args, transform(expr.get(2), depth + 1));
+    }
+
+    static public List<Expression> parse(List<Tokenizer.Token> tokens) {
+        tokens.add(0, Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_OPEN, "("));
+        tokens.add(Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_CLOSE, ")"));
+        ParseResult parseResult = parse(tokens, 0, 0);
         if (parseResult.offset != tokens.size()) {
             throw new RuntimeException("Invalid syntax");
         }
-        List<Node> nodes = ((ListNode) parseResult.node.getChild(0)).getChildren();
-        // System.out.println("Parsed node: " + nodes.toString());
+        List<Expression> nodes = ((ListExpr) parseResult.node.get(0)).getAll();
+        System.out.println("Parsed node: " + nodes.toString());
+
+        for (int i = 0; i < nodes.size(); i++) {
+            nodes.set(i, transform(nodes.get(i), 0));
+        }
+        System.out.println("Transformed node: " + nodes.toString());
         return nodes;
     }
 
 
-    private static class TokenType<TVALUE> {
-        private final String title;
-
-        public TokenType(final String title) {
-            this.title = title;
-        }
-
-        @Override
-        public String toString() {
-            return "#" + title;
-        }
-
-        public static final TokenType<String> PAREN_OPEN = new TokenType<String>("PAREN_OPEN") {
-        };
-        public static final TokenType<String> PAREN_CLOSE = new TokenType<String>("PAREN_CLOSE") {
-        };
-        public static final TokenType<Integer> NUMBER = new TokenType<Integer>("NUMBER") {
-        };
-        public static final TokenType<String> SYMBOL = new TokenType<String>("SYMBOL") {
-        };
-        public static final TokenType<Boolean> BOOLEAN = new TokenType<Boolean>("BOOLEAN") {
-        };
-    }
-
-    private static abstract class Token<R> {
-        abstract TokenType<R> getType();
-
-        abstract R getValue();
-
-        public <SR> Token<SR> as(TokenType<SR> type) {
-            return (Token<SR>) this;
-        }
-
-        @Override
-        public String toString() {
-            TokenType<R> type = getType();
-            R value = getValue();
-            return "Token{" + type + ", " + value + " }";
-        }
-
-        static <SR> Token<SR> makeToken(final TokenType<SR> type, final SR value) {
-            return new Token<SR>() {
-                @Override
-                public TokenType<SR> getType() {
-                    return type;
-                }
-
-                @Override
-                public SR getValue() {
-                    return value;
-                }
-            };
-        }
-    }
-
-    private static boolean isNumber(final String rawToken) {
-        return Pattern.compile("\\d+").matcher(rawToken).matches();
-    }
-
-    private static boolean isBoolean(final String rawToken) {
-        return Pattern.compile("#[ft]").matcher(rawToken).matches();
-    }
-
-    private static boolean isParenOpen(final String rawToken) {
-        return rawToken.equals("(");
-    }
-
-    private static boolean isParenClose(final String rawToken) {
-        return rawToken.equals(")");
-    }
-
-    private static boolean parseBoolean(final String rawToken) {
-        switch (rawToken) {
-            case "#t":
-                return true;
-            case "#f":
-                return false;
-            default:
-                throw new IllegalArgumentException("boolean value should be either '#t' or '#f'");
-        }
-    }
-
-    static List<Token> tokenize(final String input) {
-        // System.out.println("Initial input: " + input);
-        // insert spaces & split
-        final String[] rawTokens = input.replace("(", " ( ")
-                .replace(")", " ) ")
-                .split(" ");
-        // System.out.println("Converted input: " + Arrays.toString(rawTokens));
-
-
-        // parse into tokens
-        final List<Token> tokens = new LinkedList<>();
-        for (final String rawToken : rawTokens) {
-            if (rawToken == null || rawToken.isEmpty()) {
-                continue;
-            }
-            if (isNumber(rawToken)) {
-                tokens.add(Token.makeToken(TokenType.NUMBER, Integer.parseInt(rawToken)));
-            } else if (isParenOpen(rawToken)) {
-                tokens.add(Token.makeToken(TokenType.PAREN_OPEN, rawToken));
-            } else if (isParenClose(rawToken)) {
-                tokens.add(Token.makeToken(TokenType.PAREN_CLOSE, rawToken));
-            } else if (isBoolean(rawToken)) {
-                tokens.add(Token.makeToken(TokenType.BOOLEAN, parseBoolean(rawToken)));
-            } else {
-                tokens.add(Token.makeToken(TokenType.SYMBOL, rawToken));
-            }
-        }
-
-        // System.out.println("Tokens: " + tokens);
-
-        return tokens;
-    }
-
     // for testing purposes
     public static void main(String[] args) {
-        final String input = "(this (is an) (s expression 2))(and also (this))";
-        parse(tokenize(input));
+        final String input = "((+) (is 2))(define (a) (lambda () 2))";
+        parse(Tokenizer.tokenize(input));
     }
 }

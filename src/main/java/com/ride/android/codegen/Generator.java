@@ -1,6 +1,9 @@
-package com.ride.android;
+package com.ride.android.codegen;
 
 import com.android.dx.*;
+import com.ride.android.Environment;
+import com.ride.android.Parser;
+import com.ride.android.Tokenizer;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -20,14 +23,14 @@ public class Generator {
         final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
-        byte[] program = generate(Parser.parse(Parser.tokenize(input)));
+        byte[] program = generate(Parser.parse(Tokenizer.tokenize(input)));
 
         dexResult.write(program);
         dexResult.flush();
         dexResult.close();
     }
 
-    static byte[] generate(final List<Parser.Node> nodes) {
+    public static byte[] generate(final List<Parser.Expression> nodes) {
         Environment environment = new Environment();
         initBuiltins(environment);
 
@@ -35,12 +38,12 @@ public class Generator {
 
         FunctionCode mainFunctionCode = megaModule.makeMain();
 
-        for (Parser.Node node : nodes) {
-            Parser.Node firstChild = ((Parser.ListNode) node).getChild(0);
-            if (firstChild instanceof Parser.SymbolNode && ((Parser.SymbolNode) firstChild).symbol.equals("define")) {
+        for (Parser.Expression node : nodes) {
+            Parser.Expression functionExpression = ((Parser.Application) node).getFunction();
+            if (functionExpression instanceof Parser.Variable && ((Parser.Variable) functionExpression).name.equals("define")) {
                 generateFunction(environment, megaModule,
-                        (Parser.ListNode) ((Parser.ListNode) node).getChild(1),
-                        ((Parser.ListNode) node).getChild(2));
+                        (Parser.Application) ((Parser.Application) node).getArg(0),
+                        ((Parser.Application) node).getArg(1));
             } else {
                 LocalWrapper target = mainFunctionCode.getOrCreateLocal(0);
                 Expr expr = generateExpression(mainFunctionCode, node, target, environment);
@@ -67,19 +70,19 @@ public class Generator {
 
     private static void generateFunction(final Environment environment,
                                          final Module megaModule,
-                                         final Parser.ListNode definition,
-                                         final Parser.Node body) {
+                                         final Parser.Application definition,
+                                         final Parser.Expression body) {
         // get name and args
-        Parser.SymbolNode name = (Parser.SymbolNode) definition.getChild(0);
-        int paramsCount = definition.getChildren().size() - 1;
-        TypeId[] params = new TypeId[paramsCount];
+        Parser.Variable functionVarExpression = (Parser.Variable) definition.getFunction();
+        int argsCount = definition.getArgs().size() - 1;
+        TypeId[] params = new TypeId[argsCount];
         Arrays.fill(params, TypeId.INT);
-        FunctionCode functionCode = megaModule.make(TypeId.INT, name.symbol, params);
+        FunctionCode functionCode = megaModule.make(TypeId.INT, functionVarExpression.name, params);
 
-        // register params
+        // register args
         environment.push();
-        for (int i = 0; i < paramsCount; i++) {
-            environment.add(((Parser.SymbolNode) definition.getChild(i + 1)).symbol,
+        for (int i = 0; i < argsCount; i++) {
+            environment.add(((Parser.Variable) definition.getArg(i)).name,
                     new VarEntry(functionCode.getParam(i)));
         }
 
@@ -93,24 +96,24 @@ public class Generator {
 
         // register function
         environment.pop();
-        Type[] exprParams = new Type[paramsCount];
+        Type[] exprParams = new Type[argsCount];
         Arrays.fill(exprParams, Type.INTEGER);
-        environment.add(name.symbol, new FunctionEntry(new TypeFunction(Type.INTEGER, Arrays.asList(exprParams)),
+        environment.add(functionVarExpression.name, new FunctionEntry(new TypeFunction(Type.INTEGER, Arrays.asList(exprParams)),
                 functionCode.getMethodId()));
     }
 
     private static Expr generateExpression(final FunctionCode functionCode,
-                                           final Parser.Node node,
+                                           final Parser.Expression expression,
                                            final LocalWrapper target,
                                            final Environment environment) {
-        if (node instanceof Parser.NumberNode) {
-            return generateNumber(functionCode, (Parser.NumberNode) node, target);
-        } else if (node instanceof Parser.BooleanNode) {
-            return generateBoolean(functionCode, (Parser.BooleanNode) node, target);
-        } else if (node instanceof Parser.ListNode) {
-            return generateApplication(functionCode, (Parser.ListNode) node, target, environment);
-        } else if (node instanceof Parser.SymbolNode) {
-            return generateVarExpression(functionCode, (Parser.SymbolNode) node, target, environment);
+        if (expression instanceof Parser.Int) {
+            return generateNumber(functionCode, (Parser.Int) expression, target);
+        } else if (expression instanceof Parser.Bool) {
+            return generateBoolean(functionCode, (Parser.Bool) expression, target);
+        } else if (expression instanceof Parser.Application) {
+            return generateApplication(functionCode, (Parser.Application) expression, target, environment);
+        } else if (expression instanceof Parser.Variable) {
+            return generateVarExpression(functionCode, (Parser.Variable) expression, target, environment);
         } else {
             throw new RuntimeException("Top level symbols not supported");
         }
@@ -150,7 +153,7 @@ public class Generator {
         }
     }
 
-    interface EnvironmentEntry {
+    public interface EnvironmentEntry {
         Type getType();
     }
 
@@ -228,14 +231,14 @@ public class Generator {
     }
 
     public static Expr generateIf(final FunctionCode functionCode,
-                                  final List<Parser.Node> nodes,
+                                  final List<Parser.Expression> branches,
                                   final LocalWrapper target,
                                   final Environment environment) {
         Label thenLabel = new Label();
         Label afterLabel = new Label();
 
         LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprIf = generateExpression(functionCode, nodes.get(1), ifResult, environment);
+        Expr exprIf = generateExpression(functionCode, branches.get(0), ifResult, environment);
         if (exprIf.type != Type.BOOLEAN) {
             return new Expr(Type.EXCEPTION);
         }
@@ -244,14 +247,14 @@ public class Generator {
 
         // else
         LocalWrapper elseResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprElse = generateExpression(functionCode, nodes.get(2), elseResult, environment);
+        Expr exprElse = generateExpression(functionCode, branches.get(1), elseResult, environment);
         functionCode.move(target, elseResult);
         functionCode.jump(afterLabel);
 
         // then
         functionCode.markLabel(thenLabel);
         LocalWrapper thenResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprThen = generateExpression(functionCode, nodes.get(3), thenResult, environment);
+        Expr exprThen = generateExpression(functionCode, branches.get(2), thenResult, environment);
         functionCode.move(target, thenResult);
 
         if (exprElse.type != Type.INTEGER || !exprElse.type.equals(exprThen.type)) {
@@ -265,21 +268,21 @@ public class Generator {
 
 
     private static Expr generateApplication(final FunctionCode functionCode,
-                                            final Parser.ListNode node,
+                                            final Parser.Application application,
                                             final LocalWrapper target,
                                             final Environment environment) {
-        if (!(node.getChild(0) instanceof Parser.SymbolNode)) {
+        if (!(application.getFunction() instanceof Parser.Variable)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
-        Parser.SymbolNode func = (Parser.SymbolNode) node.getChild(0);
-        String symbol = func.symbol;
+        Parser.Variable functionVarExpression = (Parser.Variable) application.getFunction();
+        String functionName = functionVarExpression.name;
 
-        if (symbol.equals("if")) {
-            return generateIf(functionCode, node.getChildren(), target, environment);
+        if (functionName.equals("if")) {
+            return generateIf(functionCode, application.getArgs(), target, environment);
         }
 
         // check if function call
-        EnvironmentEntry lookedUpEntry = environment.lookup(symbol);
+        EnvironmentEntry lookedUpEntry = environment.lookup(functionName);
         if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TypeFunction) {
             // lookup entry and its type
             ApplicableEnvironmentEntry functionEntry = (ApplicableEnvironmentEntry) lookedUpEntry;
@@ -290,10 +293,7 @@ public class Generator {
             LocalWrapper[] args = new LocalWrapper[argsCount];
             for (int i = 0; i < argsCount; i++) {
                 LocalWrapper argLocalWrapper = functionCode.getOrCreateLocal(target.getPos() + i + 1);
-                Expr argExpr = generateExpression(functionCode, node.getChild(i + 1), argLocalWrapper, environment);
-                if (argExpr.type != functionEntryType.inputTypes.get(i)) {
-                    return new Expr(Type.EXCEPTION);
-                }
+                Expr argExpr = generateExpression(functionCode, application.getArg(i), argLocalWrapper, environment);
                 args[i] = argLocalWrapper;
             }
 
@@ -301,19 +301,19 @@ public class Generator {
             return functionEntry.apply(functionCode, target, args);
         } else if (lookedUpEntry != null) {
             // this should never happen
-            throw new RuntimeException("Symbol is not callable \"" + func.symbol + "\"");
+            throw new RuntimeException("Symbol is not callable \"" + functionVarExpression.name + "\"");
         } else {
-            throw new RuntimeException("Unknown symbol \"" + func.symbol + "\"");
+            throw new RuntimeException("Unknown name \"" + functionVarExpression.name + "\"");
         }
     }
 
     private static Expr generateVarExpression(final FunctionCode functionCode,
-                                              final Parser.SymbolNode node,
+                                              final Parser.Variable node,
                                               final LocalWrapper target,
                                               final Environment environment) {
-        final EnvironmentEntry lookedUpEntry = environment.lookup(node.symbol);
+        final EnvironmentEntry lookedUpEntry = environment.lookup(node.name);
         if (lookedUpEntry == null) {
-            System.out.println("Unknown entry \"" + node.symbol + "\"");
+            System.out.println("Unknown entry \"" + node.name + "\"");
             return new Expr(Type.EXCEPTION);
         } else if (lookedUpEntry.getType() instanceof TypeInteger) {
             VarEntry varEntry = (VarEntry) lookedUpEntry;
@@ -321,20 +321,20 @@ public class Generator {
             return new Expr(Type.INTEGER);
         } else {
             // todo: support functions as vars
-            System.out.println("Function as var not supported \"" + node.symbol + "\"");
+            System.out.println("Function as name not supported \"" + node.name + "\"");
             return new Expr(Type.EXCEPTION);
         }
     }
 
     private static Expr generateNumber(final FunctionCode functionCode,
-                                       final Parser.NumberNode node,
+                                       final Parser.Int node,
                                        final LocalWrapper target) {
         functionCode.load(target, node.number);
         return new Expr(Type.INTEGER);
     }
 
     private static Expr generateBoolean(final FunctionCode functionCode,
-                                        final Parser.BooleanNode node,
+                                        final Parser.Bool node,
                                         final LocalWrapper target) {
         functionCode.load(target, node.value ? 1 : 0);
         return new Expr(Type.BOOLEAN);

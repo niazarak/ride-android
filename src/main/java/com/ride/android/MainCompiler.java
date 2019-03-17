@@ -1,5 +1,6 @@
 package com.ride.android;
 
+import com.ride.android.codegen.Generator;
 import picocli.CommandLine;
 
 import java.io.*;
@@ -64,7 +65,7 @@ public class MainCompiler {
     }
 
     static void compile(final String input, OutputStream output) throws IOException {
-        byte[] program = Generator.generate(Parser.parse(Parser.tokenize(input)));
+        byte[] program = Generator.generate(Parser.parse(Tokenizer.tokenize(input)));
         output.write(program);
     }
 }
