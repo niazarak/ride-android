@@ -108,7 +108,7 @@ public class Generator {
         } else if (node instanceof Parser.BooleanNode) {
             return generateBoolean(functionCode, (Parser.BooleanNode) node, target);
         } else if (node instanceof Parser.ListNode) {
-            return generateListExpression(functionCode, (Parser.ListNode) node, target, environment);
+            return generateApplication(functionCode, (Parser.ListNode) node, target, environment);
         } else if (node instanceof Parser.SymbolNode) {
             return generateVarExpression(functionCode, (Parser.SymbolNode) node, target, environment);
         } else {
@@ -264,10 +264,10 @@ public class Generator {
     }
 
 
-    private static Expr generateListExpression(final FunctionCode functionCode,
-                                               final Parser.ListNode node,
-                                               final LocalWrapper target,
-                                               final Environment environment) {
+    private static Expr generateApplication(final FunctionCode functionCode,
+                                            final Parser.ListNode node,
+                                            final LocalWrapper target,
+                                            final Environment environment) {
         if (!(node.getChild(0) instanceof Parser.SymbolNode)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
@@ -281,8 +281,11 @@ public class Generator {
         // check if function call
         EnvironmentEntry lookedUpEntry = environment.lookup(symbol);
         if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TypeFunction) {
+            // lookup entry and its type
             ApplicableEnvironmentEntry functionEntry = (ApplicableEnvironmentEntry) lookedUpEntry;
             TypeFunction functionEntryType = (TypeFunction) functionEntry.getType();
+
+            // eval args and put into locals
             int argsCount = functionEntryType.inputTypes.size();
             LocalWrapper[] args = new LocalWrapper[argsCount];
             for (int i = 0; i < argsCount; i++) {
@@ -293,6 +296,8 @@ public class Generator {
                 }
                 args[i] = argLocalWrapper;
             }
+
+            // generate call
             return functionEntry.apply(functionCode, target, args);
         } else if (lookedUpEntry != null) {
             // this should never happen
