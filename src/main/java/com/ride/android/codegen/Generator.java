@@ -2,10 +2,11 @@ package com.ride.android.codegen;
 
 import com.android.dx.*;
 import com.ride.android.Environment;
+import com.ride.android.ast.Ast;
 import com.ride.android.ast.Expression;
 import com.ride.android.ast.Expressions;
-import com.ride.android.ast.Parser;
-import com.ride.android.ast.Tokenizer;
+import com.ride.android.parser.Parser;
+import com.ride.android.parser.Tokenizer;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -27,7 +28,7 @@ public class Generator {
         final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
-        byte[] program = generate(Parser.parse(Tokenizer.tokenize(input)));
+        byte[] program = generate(Ast.ast(Parser.parse(Tokenizer.tokenize(input))));
 
         dexResult.write(program);
         dexResult.flush();

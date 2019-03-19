@@ -1,7 +1,8 @@
 package com.ride.android;
 
-import com.ride.android.ast.Parser;
-import com.ride.android.ast.Tokenizer;
+import com.ride.android.ast.Ast;
+import com.ride.android.parser.Parser;
+import com.ride.android.parser.Tokenizer;
 import com.ride.android.codegen.Generator;
 import picocli.CommandLine;
 
@@ -67,7 +68,7 @@ public class MainCompiler {
     }
 
     static void compile(final String input, OutputStream output) throws IOException {
-        byte[] program = Generator.generate(Parser.parse(Tokenizer.tokenize(input)));
+        byte[] program = Generator.generate(Ast.ast(Parser.parse(Tokenizer.tokenize(input))));
         output.write(program);
     }
 }

@@ -1,6 +1,5 @@
 package com.ride.android.ast;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class Expressions {
@@ -115,29 +114,6 @@ public class Expressions {
         @Override
         public String toString() {
             return "Bool{" + value + '}';
-        }
-    }
-
-    public static class ListExpr extends Expression {
-        List<Expression> expressions = new ArrayList<>();
-
-        public void add(Expression expression) {
-            expressions.add(expression);
-        }
-
-        public List<Expression> getAll() {
-            return expressions;
-        }
-
-        @Override
-        public String toString() {
-            return "ListExpr{" +
-                    "expressions=" + expressions +
-                    '}';
-        }
-
-        public Expression get(int i) {
-            return expressions.get(i);
         }
     }
 
