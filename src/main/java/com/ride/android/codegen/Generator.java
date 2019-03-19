@@ -5,6 +5,7 @@ import com.ride.android.Environment;
 import com.ride.android.ast.Ast;
 import com.ride.android.ast.Expression;
 import com.ride.android.ast.Expressions;
+import com.ride.android.ast.TypeChecker;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;
 
@@ -28,7 +29,7 @@ public class Generator {
         final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
-        byte[] program = generate(Ast.ast(Parser.parse(Tokenizer.tokenize(input))));
+        byte[] program = generate(TypeChecker.infer(Ast.ast(Parser.parse(Tokenizer.tokenize(input)))));
 
         dexResult.write(program);
         dexResult.flush();
@@ -44,7 +45,7 @@ public class Generator {
         FunctionCode mainFunctionCode = megaModule.makeMain();
 
         for (Expression node : nodes) {
-            Expression functionExpression = ((Expressions.Application) node).getFunction();
+            Expression functionExpression = ((Expressions.Application) node).function;
             if (functionExpression instanceof Expressions.Variable && ((Expressions.Variable) functionExpression).name.equals("define")) {
                 generateFunction(environment, megaModule,
                         (Expressions.Application) ((Expressions.Application) node).getArg(0),
@@ -75,7 +76,7 @@ public class Generator {
                                          final Expressions.Application definition,
                                          final Expression body) {
         // get name and args
-        Expressions.Variable functionVarExpression = (Expressions.Variable) definition.getFunction();
+        Expressions.Variable functionVarExpression = (Expressions.Variable) definition.function;
         int argsCount = definition.getArgs().size() - 1;
         TypeId[] params = new TypeId[argsCount];
         Arrays.fill(params, TypeId.INT);
@@ -246,10 +247,10 @@ public class Generator {
                                             final Expressions.Application application,
                                             final LocalWrapper target,
                                             final Environment environment) {
-        if (!(application.getFunction() instanceof Expressions.Variable)) {
+        if (!(application.function instanceof Expressions.Variable)) {
             throw new RuntimeException("Functions as expressions not supported");
         }
-        Expressions.Variable functionVarExpression = (Expressions.Variable) application.getFunction();
+        Expressions.Variable functionVarExpression = (Expressions.Variable) application.function;
 
         EnvironmentEntry lookedUpEntry = environment.lookup(functionVarExpression.name);
         if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TFunction) {

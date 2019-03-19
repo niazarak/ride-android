@@ -1,12 +1,15 @@
 package com.ride.inference;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public class Expressions {
 
     static abstract class Expression {
+        Types.Type type;
+
         abstract Types.Type infer(Environment environment);
     }
 
@@ -23,6 +26,7 @@ public class Expressions {
             if (varType == null) {
                 throw new InferException(name + " is not found in environment");
             }
+            type = varType.expose(environment);
             return varType;
         }
     }
@@ -50,9 +54,10 @@ public class Expressions {
             }
             Types.Type resultType = environment.newvar();
             Types.TFunction unifiedFunctionType = new Types.TFunction(argsType, resultType);
-            if (environment.unify(functionType, unifiedFunctionType))
+            if (environment.unify(functionType, unifiedFunctionType)) {
+                type = resultType.expose(environment);
                 return resultType;
-            else
+            } else
                 throw new InferException(unifiedFunctionType + " and " + functionType + " cannot be unified");
         }
     }
@@ -71,7 +76,9 @@ public class Expressions {
 
         @Override
         Types.Type infer(Environment environment) {
-            return value != null ? Types.TLiteral.TInt : Types.TLiteral.TBool;
+            Types.TLiteral resultType = value != null ? Types.TLiteral.TInt : Types.TLiteral.TBool;
+            type = resultType.expose(environment);
+            return resultType;
         }
     }
 
@@ -99,14 +106,48 @@ public class Expressions {
                 argsTypes.add(argType);
             }
             Types.TFunction resultFunctionType = new Types.TFunction(argsTypes, body.infer(environment));
+            type = resultFunctionType.expose(environment);
             environment.pop();
             return resultFunctionType;
         }
     }
 
-    static class InferException extends RuntimeException {
+    public static class InferException extends RuntimeException {
         public InferException(String message) {
             super(message);
         }
+    }
+
+    // expression helpers
+    public static Expression lambda(String arg, Expression body) {
+        return new EAbstraction(arg, body);
+    }
+
+    public static Expression lambda(List<String> args, Expression body) {
+        return new EAbstraction(args, body);
+    }
+
+    public static List<String> boundVars(String... vars) {
+        return Arrays.asList(vars);
+    }
+
+    public static EApplication apply(Expression fun, Expression arg) {
+        return new EApplication(fun, arg);
+    }
+
+    public static EApplication apply(Expression fun, List<Expression> args) {
+        return new EApplication(fun, args);
+    }
+
+    public static List<Expression> applyArgs(Expression... expressions) {
+        return Arrays.asList(expressions);
+    }
+
+    public static ELiteral literal(int value) {
+        return new ELiteral(value);
+    }
+
+    public static EVariable var(String y) {
+        return new EVariable(y);
     }
 }

@@ -6,6 +6,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Ast {
+
+    public static List<Expression> ast(List<SExpressions.SExpression> nodes) {
+        List<Expression> expressions = new ArrayList<>();
+        for (SExpressions.SExpression node : nodes) {
+            expressions.add(transform(node, 0));
+        }
+        System.out.println("Transformed expresions: " + expressions.toString());
+        return expressions;
+    }
+
     private static Expression transform(SExpressions.SExpression expr, int depth) {
         if (expr instanceof SExpressions.Boolean) {
             return new Expressions.Bool(((SExpressions.Boolean) expr).value);
@@ -106,14 +116,5 @@ public class Ast {
             args.add(arg.name);
         }
         return new Expressions.Lambda(args, transform(expr.get(2), depth + 1));
-    }
-
-    public static List<Expression> ast(List<SExpressions.SExpression> nodes) {
-        List<Expression> expressions = new ArrayList<>();
-        for (SExpressions.SExpression node : nodes) {
-            expressions.add(transform(node, 0));
-        }
-        System.out.println("Transformed expresions: " + expressions.toString());
-        return expressions;
     }
 }

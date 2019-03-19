@@ -3,9 +3,7 @@ package com.ride.inference;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.List;
-
+import static com.ride.inference.Expressions.*;
 import static com.ride.inference.Types.*;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertEquals;
@@ -113,7 +111,7 @@ public class InferenceTest {
     public void testApplicationOfNaryPlus() {
         // given
         environment.define("+", func(args(integer(), integer()), integer())); // [int x int] -> int
-        Expressions.Expression e = lambda(boundVars("y", "x"),
+        Expressions.Expression e = lambda(boundVars("x", "y"),
                 apply(var("+"), applyArgs(var("x"), var("y")))
         );
 
@@ -144,39 +142,4 @@ public class InferenceTest {
         assertThat(result, instanceOf(Types.TLiteral.class));
         assertEquals(result, integer());
     }
-
-
-    // expression helpers
-    private Expressions.Expression lambda(String arg, Expressions.Expression body) {
-        return new Expressions.EAbstraction(arg, body);
-    }
-
-    private Expressions.Expression lambda(List<String> args, Expressions.Expression body) {
-        return new Expressions.EAbstraction(args, body);
-    }
-
-    private List<String> boundVars(String... vars) {
-        return Arrays.asList(vars);
-    }
-
-    private Expressions.EApplication apply(Expressions.Expression fun, Expressions.Expression arg) {
-        return new Expressions.EApplication(fun, arg);
-    }
-
-    private Expressions.EApplication apply(Expressions.Expression fun, List<Expressions.Expression> args) {
-        return new Expressions.EApplication(fun, args);
-    }
-
-    private List<Expressions.Expression> applyArgs(Expressions.Expression... expressions) {
-        return Arrays.asList(expressions);
-    }
-
-    private Expressions.ELiteral literal(int value) {
-        return new Expressions.ELiteral(value);
-    }
-
-    private Expressions.EVariable var(String y) {
-        return new Expressions.EVariable(y);
-    }
-
 }
