@@ -1,5 +1,7 @@
 package com.ride.android;
 
+import com.ride.android.ast.Parser;
+import com.ride.android.ast.Tokenizer;
 import com.ride.android.codegen.Generator;
 import picocli.CommandLine;
 

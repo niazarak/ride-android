@@ -35,6 +35,21 @@ public class Checker {
         inferResult = e.infer(env);
         reportResult(inferResult, env);
 
+        e = new Expressions.EAbstraction("y",
+                new Expressions.EAbstraction("x",
+                        new Expressions.EApplication(
+                                new Expressions.EApplication(new Expressions.EVariable("+"), new Expressions.EVariable("x")),
+                                new Expressions.EVariable("y")
+                        )
+                )
+        );
+        env = new Environment();
+        env.define("+", new Types.TFunction(Types.TLiteral.TInt,
+                new Types.TFunction(Types.TLiteral.TInt,
+                        Types.TLiteral.TInt)));
+        inferResult = e.infer(env);
+        reportResult(inferResult, env);
+
         e = new Expressions.EAbstraction("x", new Expressions.ELiteral(2));
         env = new Environment();
         inferResult = e.infer(env);
@@ -42,6 +57,6 @@ public class Checker {
     }
 
     private static void reportResult(Types.Type inferResult, Environment env) {
-        System.out.println("Result type: " + inferResult + ", exposed: " + env.expose(inferResult));
+        System.out.println("Result type: " + inferResult + ", exposed: " + inferResult.expose(env));
     }
 }
