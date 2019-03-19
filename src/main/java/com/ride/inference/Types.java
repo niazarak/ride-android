@@ -1,5 +1,8 @@
 package com.ride.inference;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 public class Types {
@@ -39,10 +42,16 @@ public class Types {
     }
 
     static class TFunction extends Type {
-        final Type arg, res;
+        final List<Type> args;
+        final Type res;
 
         public TFunction(Type arg, Type res) {
-            this.arg = arg;
+            this.args = Collections.singletonList(arg);
+            this.res = res;
+        }
+
+        public TFunction(List<Type> args, Type res) {
+            this.args = args;
             this.res = res;
         }
 
@@ -51,23 +60,31 @@ public class Types {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             TFunction tFunction = (TFunction) o;
-            return Objects.equals(arg, tFunction.arg) &&
+            return Objects.equals(args, tFunction.args) &&
                     Objects.equals(res, tFunction.res);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(arg, res);
+            return Objects.hash(args, res);
         }
 
         @Override
         public String toString() {
-            return "(" + arg + " => " + res + ')';
+            return "(" + args + " => " + res + ')';
         }
 
         @Override
         Type expose(Environment env) {
-            return new TFunction(arg.expose(env), res.expose(env));
+            return new TFunction(exposeArgs(env), res.expose(env));
+        }
+
+        private List<Type> exposeArgs(Environment env) {
+            List<Type> exposedArgs = new ArrayList<>();
+            for (Type arg : args) {
+                exposedArgs.add(arg.expose(env));
+            }
+            return exposedArgs;
         }
     }
 

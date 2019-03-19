@@ -1,9 +1,6 @@
 package com.ride.inference;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.ListIterator;
-import java.util.Map;
+import java.util.*;
 
 public final class Environment {
     private final LinkedList<Map<String, Types.Type>> env = new LinkedList<>();
@@ -59,10 +56,23 @@ public final class Environment {
         if (a instanceof Types.TFunction && b instanceof Types.TFunction) {
             Types.TFunction aFunc = (Types.TFunction) a;
             Types.TFunction bFunc = (Types.TFunction) b;
-            return unify(aFunc.arg, bFunc.arg) && unify(aFunc.res, bFunc.res);
+            return unify(aFunc.args, bFunc.args) && unify(aFunc.res, bFunc.res);
         }
 
         return false;
+    }
+
+    private boolean unify(List<Types.Type> a, List<Types.Type> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int j = 0; j < a.size(); j++) {
+            boolean unificationResult = unify(a.get(j), b.get(j));
+            if (!unificationResult) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean bind(Types.TVariable var, Types.Type t) {
