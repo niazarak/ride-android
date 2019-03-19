@@ -49,9 +49,6 @@ public class Generator {
             } else {
                 LocalWrapper target = mainFunctionCode.getOrCreateLocal(0);
                 Expr expr = generateExpression(mainFunctionCode, node, target, environment);
-                if (expr.type == Type.EXCEPTION) {
-                    throw new RuntimeException("Compilation failed");
-                }
 
                 TypeId<System> systemType = TypeId.get(System.class);
                 TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
@@ -91,9 +88,6 @@ public class Generator {
         // launch func body
         LocalWrapper target = functionCode.getOrCreateLocal(0);
         Expr funcBodyExpr = generateExpression(functionCode, body, target, environment);
-        if (funcBodyExpr.type == Type.EXCEPTION) {
-            throw new RuntimeException("Compilation failed");
-        }
         functionCode.returnValue(target);
 
         // register function
@@ -125,14 +119,10 @@ public class Generator {
 
     interface Type {
         TypeInteger INTEGER = new TypeInteger();
-        TypeException EXCEPTION = new TypeException();
         TypeBoolean BOOLEAN = new TypeBoolean();
     }
 
     static class TypeInteger implements Type {
-    }
-
-    static class TypeException implements Type {
     }
 
     static class TypeBoolean implements Type {
@@ -244,7 +234,7 @@ public class Generator {
         LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
         Expr exprIf = generateExpression(functionCode, expr.condition, ifResult, environment);
         if (exprIf.type != Type.BOOLEAN) {
-            return new Expr(Type.EXCEPTION);
+            throw new RuntimeException("Condition should return boolean");
         }
         // if
         functionCode.compareZ(thenLabel, ifResult);
@@ -262,7 +252,7 @@ public class Generator {
         functionCode.move(target, thenResult);
 
         if (exprElse.type != Type.INTEGER || !exprElse.type.equals(exprThen.type)) {
-            return new Expr(Type.EXCEPTION);
+            throw new RuntimeException("Branches types should match");
         }
 
         // after
@@ -311,16 +301,14 @@ public class Generator {
                                               final Environment environment) {
         final EnvironmentEntry lookedUpEntry = environment.lookup(expr.name);
         if (lookedUpEntry == null) {
-            System.out.println("Unknown entry \"" + expr.name + "\"");
-            return new Expr(Type.EXCEPTION);
+            throw new RuntimeException("Unknown entry \"" + expr.name + "\"");
         } else if (lookedUpEntry.getType() instanceof TypeInteger) {
             VarEntry varEntry = (VarEntry) lookedUpEntry;
             functionCode.move(target, varEntry.varWrapper);
             return new Expr(Type.INTEGER);
         } else {
             // todo: support functions as vars
-            System.out.println("Function as name not supported \"" + expr.name + "\"");
-            return new Expr(Type.EXCEPTION);
+            throw new RuntimeException("Function as name not supported \"" + expr.name + "\"");
         }
     }
 
