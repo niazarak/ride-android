@@ -1,13 +1,10 @@
 package com.ride.inference;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class Types {
-    static abstract class Type {
-        abstract Type expose(Environment env);
+    public static abstract class Type {
+        public abstract Type expose(Environment env);
     }
 
     static class TVariable extends Type {
@@ -36,13 +33,13 @@ public class Types {
         }
 
         @Override
-        Type expose(Environment env) {
+        public Type expose(Environment env) {
             return env.expose(this);
         }
     }
 
-    static class TFunction extends Type {
-        final List<Type> args;
+    public static class TFunction extends Type {
+        public final List<Type> args;
         final Type res;
 
         public TFunction(Type arg, Type res) {
@@ -75,7 +72,7 @@ public class Types {
         }
 
         @Override
-        Type expose(Environment env) {
+        public Type expose(Environment env) {
             return new TFunction(exposeArgs(env), res.expose(env));
         }
 
@@ -88,7 +85,7 @@ public class Types {
         }
     }
 
-    static class TLiteral extends Type {
+    public static class TLiteral extends Type {
         public static final TLiteral TInt = new TLiteral("Int");
         public static final TLiteral TBool = new TLiteral("Bool");
 
@@ -117,8 +114,32 @@ public class Types {
         }
 
         @Override
-        Type expose(Environment env) {
+        public Type expose(Environment env) {
             return this;
         }
+    }
+
+
+    public static TFunction func(Type arg, Type res) {
+        return new TFunction(arg, res);
+    }
+
+    public static TFunction func(List<Type> args, Type res) {
+        return new TFunction(args, res);
+    }
+
+    public static Type typeVar(String name) {
+        return new TVariable(name);
+    }
+
+    public static List<Type> args(Type... types) {
+        return Arrays.asList(types);
+    }
+
+    public static Type integer() {
+        return TLiteral.TInt;
+    }
+    public static Type bool() {
+        return TLiteral.TBool;
     }
 }

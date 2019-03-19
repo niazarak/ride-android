@@ -13,6 +13,8 @@ import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.ride.inference.Types.*;
+
 public class Generator {
     // for test purposes
     public static void main(String[] args) throws IOException {
@@ -93,8 +95,8 @@ public class Generator {
         // register function
         environment.pop();
         Type[] exprParams = new Type[argsCount];
-        Arrays.fill(exprParams, Type.INTEGER);
-        environment.add(functionVarExpression.name, new FunctionEntry(new TypeFunction(Type.INTEGER, Arrays.asList(exprParams)),
+        Arrays.fill(exprParams, integer());
+        environment.add(functionVarExpression.name, new FunctionEntry(func(Arrays.asList(exprParams), integer()),
                 functionCode.getMethodId()));
     }
 
@@ -117,28 +119,6 @@ public class Generator {
         }
     }
 
-    interface Type {
-        TypeInteger INTEGER = new TypeInteger();
-        TypeBoolean BOOLEAN = new TypeBoolean();
-    }
-
-    static class TypeInteger implements Type {
-    }
-
-    static class TypeBoolean implements Type {
-    }
-
-    static class TypeFunction implements Type {
-        final List<? extends Type> inputTypes;
-
-        final Type returnType;
-
-        public TypeFunction(Type returnType, List<? extends Type> inputTypes) {
-            this.returnType = returnType;
-            this.inputTypes = inputTypes;
-        }
-    }
-
     static class Expr {
         private final Type type;
 
@@ -156,10 +136,10 @@ public class Generator {
     }
 
     static class FunctionEntry implements ApplicableEnvironmentEntry {
-        private final TypeFunction type;
+        private final TFunction type;
         private final MethodId methodId;
 
-        FunctionEntry(TypeFunction type, MethodId methodId) {
+        FunctionEntry(TFunction type, MethodId methodId) {
             this.type = type;
             this.methodId = methodId;
         }
@@ -172,14 +152,14 @@ public class Generator {
         @Override
         public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
             functionCode.call(methodId, target, args);
-            return new Expr(Type.INTEGER);
+            return new Expr(integer());
         }
     }
 
     static abstract class OperatorEntry implements ApplicableEnvironmentEntry {
-        private final TypeFunction type;
+        private final TFunction type;
 
-        OperatorEntry(TypeFunction type) {
+        OperatorEntry(TFunction type) {
             this.type = type;
         }
 
@@ -190,12 +170,12 @@ public class Generator {
     }
 
     static class VarEntry implements EnvironmentEntry {
-        private final TypeInteger type;
+        private final Type type;
         private final FunctionCode.VarWrapper varWrapper;
 
         VarEntry(FunctionCode.VarWrapper varWrapper) {
             this.varWrapper = varWrapper;
-            type = Type.INTEGER;
+            type = integer();
         }
 
         @Override
@@ -221,7 +201,7 @@ public class Generator {
 
         // after
         functionCode.markLabel(afterLabel);
-        return new Expr(Type.BOOLEAN);
+        return new Expr(bool());
     }
 
     public static Expr generateIf(final FunctionCode functionCode,
@@ -233,7 +213,7 @@ public class Generator {
 
         LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
         Expr exprIf = generateExpression(functionCode, expr.condition, ifResult, environment);
-        if (exprIf.type != Type.BOOLEAN) {
+        if (exprIf.type != bool()) {
             throw new RuntimeException("Condition should return boolean");
         }
         // if
@@ -251,13 +231,13 @@ public class Generator {
         Expr exprThen = generateExpression(functionCode, expr.elseBranch, thenResult, environment);
         functionCode.move(target, thenResult);
 
-        if (exprElse.type != Type.INTEGER || !exprElse.type.equals(exprThen.type)) {
+        if (exprElse.type != integer() || !exprElse.type.equals(exprThen.type)) {
             throw new RuntimeException("Branches types should match");
         }
 
         // after
         functionCode.markLabel(afterLabel);
-        return new Expr(Type.INTEGER);
+        return new Expr(integer());
     }
 
 
@@ -271,13 +251,13 @@ public class Generator {
         Expressions.Variable functionVarExpression = (Expressions.Variable) application.getFunction();
 
         EnvironmentEntry lookedUpEntry = environment.lookup(functionVarExpression.name);
-        if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TypeFunction) {
+        if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TFunction) {
             // lookup entry and its type
             ApplicableEnvironmentEntry functionEntry = (ApplicableEnvironmentEntry) lookedUpEntry;
-            TypeFunction functionEntryType = (TypeFunction) functionEntry.getType();
+            TFunction functionEntryType = (TFunction) functionEntry.getType();
 
             // eval args and put into locals
-            int argsCount = functionEntryType.inputTypes.size();
+            int argsCount = functionEntryType.args.size();
             LocalWrapper[] args = new LocalWrapper[argsCount];
             for (int i = 0; i < argsCount; i++) {
                 LocalWrapper argLocalWrapper = functionCode.getOrCreateLocal(target.getPos() + i + 1);
@@ -302,10 +282,10 @@ public class Generator {
         final EnvironmentEntry lookedUpEntry = environment.lookup(expr.name);
         if (lookedUpEntry == null) {
             throw new RuntimeException("Unknown entry \"" + expr.name + "\"");
-        } else if (lookedUpEntry.getType() instanceof TypeInteger) {
+        } else if (lookedUpEntry.getType() instanceof TLiteral) {
             VarEntry varEntry = (VarEntry) lookedUpEntry;
             functionCode.move(target, varEntry.varWrapper);
-            return new Expr(Type.INTEGER);
+            return new Expr(integer());
         } else {
             // todo: support functions as vars
             throw new RuntimeException("Function as name not supported \"" + expr.name + "\"");
@@ -316,113 +296,113 @@ public class Generator {
                                        final Expressions.Int expr,
                                        final LocalWrapper target) {
         functionCode.load(target, expr.number);
-        return new Expr(Type.INTEGER);
+        return new Expr(integer());
     }
 
     private static Expr generateBoolean(final FunctionCode functionCode,
                                         final Expressions.Bool expr,
                                         final LocalWrapper target) {
         functionCode.load(target, expr.value ? 1 : 0);
-        return new Expr(Type.BOOLEAN);
+        return new Expr(bool());
     }
 
     private static void initBuiltins(final Environment baseEnvironment) {
-        baseEnvironment.add("+", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("+", new OperatorEntry(func(args(integer(), integer()), integer())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.add(target, args[0], args[1]);
-                return new Expr(Type.INTEGER);
+                return new Expr(integer());
             }
         });
-        baseEnvironment.add("-", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("-", new OperatorEntry(func(args(integer(), integer()), integer())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.subtract(target, args[0], args[1]);
-                return new Expr(Type.INTEGER);
+                return new Expr(integer());
             }
         });
-        baseEnvironment.add("*", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("*", new OperatorEntry(func(args(integer(), integer()), integer())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.multiply(target, args[0], args[1]);
-                return new Expr(Type.INTEGER);
+                return new Expr(integer());
             }
         });
-        baseEnvironment.add("/", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("/", new OperatorEntry(func(args(integer(), integer()), integer())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.divide(target, args[0], args[1]);
-                return new Expr(Type.INTEGER);
+                return new Expr(integer());
             }
         });
-        baseEnvironment.add("%", new OperatorEntry(new TypeFunction(Type.INTEGER, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("%", new OperatorEntry(func(args(integer(), integer()), integer())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.remainder(target, args[0], args[1]);
-                return new Expr(Type.INTEGER);
+                return new Expr(integer());
             }
         });
-        baseEnvironment.add("!=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("!=", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.NE;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add("==", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("==", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.EQ;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add(">=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add(">=", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.GE;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add(">", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add(">", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.GT;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add("<=", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("<=", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.LE;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add("<", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.INTEGER, Type.INTEGER))) {
+        baseEnvironment.add("<", new OperatorEntry(func(args(integer(), integer()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 Comparison comparison = Comparison.LT;
                 return generateComparison(functionCode, target, comparison, args[0], args[1]);
             }
         });
-        baseEnvironment.add("and", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+        baseEnvironment.add("and", new OperatorEntry(func(args(bool(), bool()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.and(target, args[0], args[1]);
-                return new Expr(Type.BOOLEAN);
+                return new Expr(bool());
             }
         });
-        baseEnvironment.add("or", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+        baseEnvironment.add("or", new OperatorEntry(func(args(bool(), bool()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.or(target, args[0], args[1]);
-                return new Expr(Type.BOOLEAN);
+                return new Expr(bool());
             }
         });
-        baseEnvironment.add("xor", new OperatorEntry(new TypeFunction(Type.BOOLEAN, Arrays.asList(Type.BOOLEAN, Type.BOOLEAN))) {
+        baseEnvironment.add("xor", new OperatorEntry(func(args(bool(), bool()), bool())) {
             @Override
             public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
                 functionCode.xor(target, args[0], args[1]);
-                return new Expr(Type.BOOLEAN);
+                return new Expr(bool());
             }
         });
     }

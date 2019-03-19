@@ -6,6 +6,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 
+import static com.ride.inference.Types.*;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
@@ -178,24 +179,4 @@ public class InferenceTest {
         return new Expressions.EVariable(y);
     }
 
-    // type helpers
-    private Types.TFunction func(Types.Type arg, Types.Type res) {
-        return new Types.TFunction(arg, res);
-    }
-
-    private Types.TFunction func(List<Types.Type> args, Types.Type res) {
-        return new Types.TFunction(args, res);
-    }
-
-    private Types.TVariable typeVar(String name) {
-        return new Types.TVariable(name);
-    }
-
-    private List<Types.Type> args(Types.Type... types) {
-        return Arrays.asList(types);
-    }
-
-    private Types.TLiteral integer() {
-        return Types.TLiteral.TInt;
-    }
 }
