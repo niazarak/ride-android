@@ -1,16 +1,21 @@
-package com.ride.android;
-
-import com.ride.android.codegen.Generator;
+package com.ride.android.codegen;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.ListIterator;
 import java.util.Map;
 
-public class Environment {
+/**
+ * This is the environment of codegen process.
+ * When a variable (function param or function name) is used, it is queried here.
+ * Environment entries contain one of
+ * - field declarations of defined functions
+ * - local wrappers of function params
+ */
+public class CodegenEnvironment {
     private LinkedList<Map<String, Generator.EnvironmentEntry>> frames = new LinkedList<>();
 
-    public Environment() {
+    public CodegenEnvironment() {
         push();
     }
 

@@ -7,7 +7,7 @@ public class Types {
         public abstract Type expose(Environment env);
     }
 
-    static class TVariable extends Type {
+    public static class TVariable extends Type {
         final String name;
 
         @Override
@@ -40,7 +40,7 @@ public class Types {
 
     public static class TFunction extends Type {
         public final List<Type> args;
-        final Type res;
+        public final Type res;
 
         public TFunction(Type arg, Type res) {
             this.args = Collections.singletonList(arg);
@@ -50,6 +50,23 @@ public class Types {
         public TFunction(List<Type> args, Type res) {
             this.args = args;
             this.res = res;
+        }
+
+        public Type getArg(int i) {
+            return args.get(i);
+        }
+
+        @Override
+        public Type expose(Environment env) {
+            return new TFunction(exposeArgs(env), res.expose(env));
+        }
+
+        private List<Type> exposeArgs(Environment env) {
+            List<Type> exposedArgs = new ArrayList<>();
+            for (Type arg : args) {
+                exposedArgs.add(arg.expose(env));
+            }
+            return exposedArgs;
         }
 
         @Override
@@ -69,19 +86,6 @@ public class Types {
         @Override
         public String toString() {
             return "(" + args + " => " + res + ')';
-        }
-
-        @Override
-        public Type expose(Environment env) {
-            return new TFunction(exposeArgs(env), res.expose(env));
-        }
-
-        private List<Type> exposeArgs(Environment env) {
-            List<Type> exposedArgs = new ArrayList<>();
-            for (Type arg : args) {
-                exposedArgs.add(arg.expose(env));
-            }
-            return exposedArgs;
         }
     }
 
@@ -136,10 +140,11 @@ public class Types {
         return Arrays.asList(types);
     }
 
-    public static Type integer() {
+    public static TLiteral integer() {
         return TLiteral.TInt;
     }
-    public static Type bool() {
+
+    public static TLiteral bool() {
         return TLiteral.TBool;
     }
 }

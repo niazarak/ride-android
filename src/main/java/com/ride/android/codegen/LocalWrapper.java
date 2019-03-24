@@ -1,30 +1,13 @@
 package com.ride.android.codegen;
 
-import com.android.dx.Code;
-import com.android.dx.TypeId;
-
-public class LocalWrapper<T> {
-    private com.android.dx.Local<T> realLocal;
-    private TypeId<T> typeId;
-    private int pos;
-
-    public LocalWrapper(int pos, TypeId<T> typeId) {
-        this.typeId = typeId;
-        this.pos = pos;
-    }
-
-    public com.android.dx.Local<T> getRealLocal() {
-        if (realLocal == null) {
-            throw new RuntimeException("Accessing locals before generating them is forbidden");
-        }
-        return realLocal;
-    }
-
-    public void generate(Code code) {
-        realLocal = code.newLocal(typeId);
-    }
-
-    public int getPos() {
-        return pos;
-    }
+/**
+ * Wraps locals
+ * See {@link DeferredLocal} and {@link ParamLocal}
+ */
+public interface LocalWrapper<T> {
+    /**
+     * Returns the wrapped local
+     * Must be used during low level compilation
+     */
+    com.android.dx.Local<T> getRealLocal();
 }

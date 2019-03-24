@@ -35,6 +35,7 @@ public class TypeChecker {
         for (Expression expression : expressions) {
             expression.infer(env);
         }
+        System.out.println("Decorated expressions: " + expressions);
         return expressions;
     }
 

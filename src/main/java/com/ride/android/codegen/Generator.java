@@ -1,23 +1,31 @@
 package com.ride.android.codegen;
 
-import com.android.dx.*;
-import com.ride.android.Environment;
+import com.android.dx.FieldId;
+import com.android.dx.Label;
+import com.android.dx.MethodId;
+import com.android.dx.TypeId;
 import com.ride.android.ast.Ast;
 import com.ride.android.ast.Expression;
 import com.ride.android.ast.Expressions;
 import com.ride.android.ast.TypeChecker;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;
+import com.ride.inference.Types;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.ride.inference.Types.*;
 
+/**
+ * Main generator class
+ * Recursively traverses AST and generates code
+ */
 public class Generator {
+
     // for test purposes
     public static void main(String[] args) throws IOException {
         // final String input = "(/ (+ 9 6) (% 7 4))";
@@ -26,7 +34,11 @@ public class Generator {
         // final String input = "(xor #t #f)";
         // final String input = "(+ 12 (if (> 5 10) 1 0))";
         // final String input = "(define (funA a) (+ a 7)) (define (funB b) (- b (funA 2))) (funB 2)";
-        final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
+        //final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
+        //final String input = "2";
+        //final String input = "((lambda (x y) (* x y)) 2 2)";
+        final String input = "((lambda () (* 2 2)))";
+
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
         byte[] program = generate(TypeChecker.infer(Ast.ast(Parser.parse(Tokenizer.tokenize(input)))));
@@ -37,32 +49,30 @@ public class Generator {
     }
 
     public static byte[] generate(final List<Expression> nodes) {
-        Environment environment = new Environment();
-        initBuiltins(environment);
+        CodegenEnvironment environment = new CodegenEnvironment();
 
         Module megaModule = new Module();
+
+        Builtins.initBuiltins(environment, megaModule);
 
         FunctionCode mainFunctionCode = megaModule.makeMain();
 
         for (Expression node : nodes) {
-            Expression functionExpression = ((Expressions.Application) node).function;
-            if (functionExpression instanceof Expressions.Variable && ((Expressions.Variable) functionExpression).name.equals("define")) {
-                generateFunction(environment, megaModule,
-                        (Expressions.Application) ((Expressions.Application) node).getArg(0),
-                        ((Expressions.Application) node).getArg(1));
+            if (node instanceof Expressions.Definition) {
+                generateDefinition(environment, megaModule, (Expressions.Definition) node, megaModule);
             } else {
-                LocalWrapper target = mainFunctionCode.getOrCreateLocal(0);
-                Expr expr = generateExpression(mainFunctionCode, node, target, environment);
+                DeferredLocal target = mainFunctionCode.getOrCreateLocal(0, TypeId.OBJECT);
+                generateExpression(mainFunctionCode, node, target, environment, megaModule);
 
                 TypeId<System> systemType = TypeId.get(System.class);
                 TypeId<PrintStream> printStreamType = TypeId.get(PrintStream.class);
                 FieldId<System, PrintStream> systemOutField = systemType.getField(printStreamType, "out");
                 MethodId<PrintStream, Void> printlnMethod = printStreamType.getMethod(
-                        TypeId.VOID, "println", TypeId.INT);
+                        TypeId.VOID, "println", TypeId.OBJECT);
 
                 LocalWrapper systemOutLocal = mainFunctionCode.getOrCreateLocal(target.getPos() + 1, printStreamType);
                 mainFunctionCode.sget(systemOutField, systemOutLocal);
-                mainFunctionCode.invokeVirtual(printlnMethod, systemOutLocal, target);
+                mainFunctionCode.invokeVirtual(printlnMethod, null, systemOutLocal, target);
             }
         }
 
@@ -71,341 +81,232 @@ public class Generator {
         return megaModule.compile();
     }
 
-    private static void generateFunction(final Environment environment,
-                                         final Module megaModule,
-                                         final Expressions.Application definition,
-                                         final Expression body) {
-        // get name and args
-        Expressions.Variable functionVarExpression = (Expressions.Variable) definition.function;
-        int argsCount = definition.getArgs().size() - 1;
-        TypeId[] params = new TypeId[argsCount];
-        Arrays.fill(params, TypeId.INT);
-        FunctionCode functionCode = megaModule.make(TypeId.INT, functionVarExpression.name, params);
-
-        // register args
-        environment.push();
-        for (int i = 0; i < argsCount; i++) {
-            environment.add(((Expressions.Variable) definition.getArg(i)).name,
-                    new VarEntry(functionCode.getParam(i)));
-        }
-
-        // launch func body
-        LocalWrapper target = functionCode.getOrCreateLocal(0);
-        Expr funcBodyExpr = generateExpression(functionCode, body, target, environment);
-        functionCode.returnValue(target);
-
-        // register function
-        environment.pop();
-        Type[] exprParams = new Type[argsCount];
-        Arrays.fill(exprParams, integer());
-        environment.add(functionVarExpression.name, new FunctionEntry(func(Arrays.asList(exprParams), integer()),
-                functionCode.getMethodId()));
-    }
-
-    private static Expr generateExpression(final FunctionCode functionCode,
+    private static void generateExpression(final FunctionCode functionCode,
                                            final Expression expression,
-                                           final LocalWrapper target,
-                                           final Environment environment) {
+                                           final DeferredLocal target,
+                                           final CodegenEnvironment environment, Module module) {
         if (expression instanceof Expressions.Int) {
-            return generateNumber(functionCode, (Expressions.Int) expression, target);
+            generateNumber(functionCode, (Expressions.Int) expression, target);
         } else if (expression instanceof Expressions.Bool) {
-            return generateBoolean(functionCode, (Expressions.Bool) expression, target);
+            generateBoolean(functionCode, (Expressions.Bool) expression, target);
         } else if (expression instanceof Expressions.Application) {
-            return generateApplication(functionCode, (Expressions.Application) expression, target, environment);
+            generateApplication(functionCode, (Expressions.Application) expression, target, environment, module);
+        } else if (expression instanceof Expressions.Lambda) {
+            generateLambda((Expressions.Lambda) expression, environment, functionCode, target, module);
         } else if (expression instanceof Expressions.IfExpr) {
-            return generateIf(functionCode, (Expressions.IfExpr) expression, target, environment);
+            generateIf(functionCode, (Expressions.IfExpr) expression, target, environment, module);
         } else if (expression instanceof Expressions.Variable) {
-            return generateVarExpression(functionCode, (Expressions.Variable) expression, target, environment);
+            generateVarExpression(functionCode, (Expressions.Variable) expression, target, environment);
         } else {
             throw new RuntimeException("Top level symbols not supported");
         }
     }
 
-    static class Expr {
-        private final Type type;
-
-        public Expr(final Type type) {
-            this.type = type;
-        }
-    }
-
     public interface EnvironmentEntry {
-        Type getType();
     }
 
-    interface ApplicableEnvironmentEntry extends EnvironmentEntry {
-        Expr apply(final FunctionCode functionCode, LocalWrapper target, LocalWrapper... args);
-    }
+    static class DefinitionEntry implements EnvironmentEntry {
+        private final FieldId fieldId;
 
-    static class FunctionEntry implements ApplicableEnvironmentEntry {
-        private final TFunction type;
-        private final MethodId methodId;
-
-        FunctionEntry(TFunction type, MethodId methodId) {
-            this.type = type;
-            this.methodId = methodId;
-        }
-
-        @Override
-        public Type getType() {
-            return type;
-        }
-
-        @Override
-        public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-            functionCode.call(methodId, target, args);
-            return new Expr(integer());
+        DefinitionEntry(FieldId fieldId) {
+            this.fieldId = fieldId;
         }
     }
 
-    static abstract class OperatorEntry implements ApplicableEnvironmentEntry {
-        private final TFunction type;
+    static class NamedArgEntry implements EnvironmentEntry {
+        private final ParamLocal varWrapper;
 
-        OperatorEntry(TFunction type) {
-            this.type = type;
-        }
-
-        @Override
-        public Type getType() {
-            return type;
-        }
-    }
-
-    static class VarEntry implements EnvironmentEntry {
-        private final Type type;
-        private final FunctionCode.VarWrapper varWrapper;
-
-        VarEntry(FunctionCode.VarWrapper varWrapper) {
+        NamedArgEntry(ParamLocal varWrapper) {
             this.varWrapper = varWrapper;
-            type = integer();
-        }
-
-        @Override
-        public Type getType() {
-            return type;
         }
     }
 
-    private static Expr generateComparison(FunctionCode functionCode, LocalWrapper target,
-                                           Comparison comparison, LocalWrapper a, LocalWrapper b) {
-        Label thenLabel = new Label();
-        Label afterLabel = new Label();
-        // if
-        functionCode.compare(comparison, thenLabel, a, b);
+    private static void generateDefinition(final CodegenEnvironment environment,
+                                           final Module megaModule,
+                                           final Expressions.Definition definition,
+                                           final Module module) {
+        // make function delegate
+        TypeId[] args = convertToTypeId(definition.getType().args);
+        TypeId res = convertToTypeId(definition.getType().res);
+        Module.ModuleDefinition moduleDefinition = megaModule.makeDefine(definition.name, res, args);
 
-        // else
-        functionCode.load(target, 0);
-        functionCode.jump(afterLabel);
+        // define args
+        environment.push();
+        for (int i = 0; i < args.length; i++) {
+            environment.add(definition.getArg(i), new NamedArgEntry(moduleDefinition.lambdaCode.applyCode.getParam(i, args[i])));
+        }
 
-        // then
-        functionCode.markLabel(thenLabel);
-        functionCode.load(target, 1);
+        // launch func body
+        DeferredLocal castedResult = moduleDefinition.lambdaCode.applyCode.getOrCreateLocal(0, TypeId.OBJECT);
+        DeferredLocal target = moduleDefinition.lambdaCode.applyCode.getOrCreateLocal(1, res);
+        generateExpression(moduleDefinition.lambdaCode.applyCode, definition.body, target, environment, module);
+        moduleDefinition.lambdaCode.applyCode.cast(castedResult, target);
+        moduleDefinition.lambdaCode.applyCode.returnValue(castedResult);
 
-        // after
-        functionCode.markLabel(afterLabel);
-        return new Expr(bool());
+        // register function
+        environment.pop();
+        environment.add(definition.name, new DefinitionEntry(moduleDefinition.definitionField));
     }
 
-    public static Expr generateIf(final FunctionCode functionCode,
+    private static void generateLambda(final Expressions.Lambda lambda,
+                                       final CodegenEnvironment environment,
+                                       final FunctionCode functionCode,
+                                       final DeferredLocal target,
+                                       final Module module) {
+        // declare lambda
+        TypeId[] args = convertToTypeId(lambda.getType().args);
+        TypeId res = convertToTypeId(lambda.getType().res);
+        LambdaCode lambdaCode = module.makeLambda(convertToTypeId(lambda.getType().res), args);
+
+        // register args
+        environment.push();
+        for (int i = 0; i < args.length; i++) {
+            environment.add(lambda.getArg(i), new NamedArgEntry(lambdaCode.applyCode.getParam(i, args[i])));
+        }
+
+        // generate body
+        DeferredLocal lambdaApplyCastedResult = lambdaCode.applyCode.getOrCreateLocal(0, TypeId.OBJECT);
+        DeferredLocal lambdaApplyResult = lambdaCode.applyCode.getOrCreateLocal(1, res);
+        generateExpression(lambdaCode.applyCode, lambda.body, lambdaApplyResult, environment, module);
+        lambdaCode.applyCode.cast(lambdaApplyCastedResult, lambdaApplyResult);
+        lambdaCode.applyCode.returnValue(lambdaApplyCastedResult);
+        environment.pop();
+
+        // instantiate lambda object to target
+        functionCode.newInstance(lambdaCode.getConstructorMethod(), target);
+    }
+
+    public static void generateIf(final FunctionCode functionCode,
                                   final Expressions.IfExpr expr,
-                                  final LocalWrapper target,
-                                  final Environment environment) {
+                                  final DeferredLocal target,
+                                  final CodegenEnvironment environment,
+                                  final Module module) {
         Label thenLabel = new Label();
         Label afterLabel = new Label();
 
-        LocalWrapper ifResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprIf = generateExpression(functionCode, expr.condition, ifResult, environment);
-        if (exprIf.type != bool()) {
-            throw new RuntimeException("Condition should return boolean");
-        }
+        // generate if expression
+        DeferredLocal ifResult = functionCode.getOrCreateLocal(target.getPos() + 1,
+                convertToTypeId(expr.condition.getType()));
+
+        // cast to boxed boolean and get primitive value
+        DeferredLocal ifCastedResult = functionCode.getOrCreateLocal(target.getPos() + 2, Module.BOXED_BOOLEAN);
+        DeferredLocal ifRawResult = functionCode.getOrCreateLocal(target.getPos() + 3, TypeId.BOOLEAN);
+        generateExpression(functionCode, expr.condition, ifResult, environment, module);
+        functionCode.cast(ifCastedResult, ifResult);
+        functionCode.invokeVirtual(Module.METHOD_BOOLEAN_VALUE, ifRawResult, ifCastedResult);
+
         // if
-        functionCode.compareZ(thenLabel, ifResult);
+        functionCode.compareZ(thenLabel, ifRawResult);
 
         // else
-        LocalWrapper elseResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprElse = generateExpression(functionCode, expr.ifBranch, elseResult, environment);
+        DeferredLocal elseResult = functionCode.getOrCreateLocal(target.getPos() + 1,
+                convertToTypeId(expr.ifBranch.getType()));
+        generateExpression(functionCode, expr.ifBranch, elseResult, environment, module);
         functionCode.move(target, elseResult);
         functionCode.jump(afterLabel);
 
         // then
         functionCode.markLabel(thenLabel);
-        LocalWrapper thenResult = functionCode.getOrCreateLocal(target.getPos() + 1);
-        Expr exprThen = generateExpression(functionCode, expr.elseBranch, thenResult, environment);
+        DeferredLocal thenResult = functionCode.getOrCreateLocal(target.getPos() + 1,
+                convertToTypeId(expr.elseBranch.getType()));
+        generateExpression(functionCode, expr.elseBranch, thenResult, environment, module);
         functionCode.move(target, thenResult);
-
-        if (exprElse.type != integer() || !exprElse.type.equals(exprThen.type)) {
-            throw new RuntimeException("Branches types should match");
-        }
 
         // after
         functionCode.markLabel(afterLabel);
-        return new Expr(integer());
     }
 
-
-    private static Expr generateApplication(final FunctionCode functionCode,
+    private static void generateApplication(final FunctionCode functionCode,
                                             final Expressions.Application application,
-                                            final LocalWrapper target,
-                                            final Environment environment) {
-        if (!(application.function instanceof Expressions.Variable)) {
-            throw new RuntimeException("Functions as expressions not supported");
+                                            final DeferredLocal target,
+                                            final CodegenEnvironment environment,
+                                            final Module module) {
+        TypeId lambdaType = convertToTypeId(application.function.getType());
+        DeferredLocal lambdaLocal = functionCode.getOrCreateLocal(target.getPos() + 1, lambdaType);
+        DeferredLocal lambdaСLocal = functionCode.getOrCreateLocal(target.getPos() + 2, TypeId.OBJECT);
+        generateExpression(functionCode, application.function, lambdaСLocal, environment, module);
+        functionCode.cast(lambdaLocal, lambdaСLocal);
+
+        // eval args and put into locals
+        int argsCount = application.getArgs().size();
+        DeferredLocal[] args = new DeferredLocal[argsCount];
+        for (int i = 0; i < argsCount; i++) {
+            Expression arg = application.getArg(i);
+            DeferredLocal argLocalWrapper = functionCode.getOrCreateLocal(target.getPos() + i + 1,
+                    convertToTypeId(application.function.getType().getArg(i)));
+            generateExpression(functionCode, arg, argLocalWrapper, environment, module);
+            args[i] = argLocalWrapper;
         }
-        Expressions.Variable functionVarExpression = (Expressions.Variable) application.function;
 
-        EnvironmentEntry lookedUpEntry = environment.lookup(functionVarExpression.name);
-        if (lookedUpEntry != null && lookedUpEntry.getType() instanceof TFunction) {
-            // lookup entry and its type
-            ApplicableEnvironmentEntry functionEntry = (ApplicableEnvironmentEntry) lookedUpEntry;
-            TFunction functionEntryType = (TFunction) functionEntry.getType();
-
-            // eval args and put into locals
-            int argsCount = functionEntryType.args.size();
-            LocalWrapper[] args = new LocalWrapper[argsCount];
-            for (int i = 0; i < argsCount; i++) {
-                LocalWrapper argLocalWrapper = functionCode.getOrCreateLocal(target.getPos() + i + 1);
-                Expr argExpr = generateExpression(functionCode, application.getArg(i), argLocalWrapper, environment);
-                args[i] = argLocalWrapper;
-            }
-
-            // generate call
-            return functionEntry.apply(functionCode, target, args);
-        } else if (lookedUpEntry != null) {
-            // this should never happen
-            throw new RuntimeException("Symbol is not callable \"" + functionVarExpression.name + "\"");
-        } else {
-            throw new RuntimeException("Unknown name \"" + functionVarExpression.name + "\"");
-        }
+        // generate call
+        TypeId[] lambdaArgsTypes = convertToTypeId(application.function.getType().args);
+        MethodId lambdaApplyMethod = lambdaType.getMethod(TypeId.OBJECT, "apply", lambdaArgsTypes);
+        functionCode.invokeVirtual(lambdaApplyMethod, target, lambdaLocal, args);
     }
 
-    private static Expr generateVarExpression(final FunctionCode functionCode,
+    private static void generateVarExpression(final FunctionCode functionCode,
                                               final Expressions.Variable expr,
-                                              final LocalWrapper target,
-                                              final Environment environment) {
+                                              final DeferredLocal target,
+                                              final CodegenEnvironment environment) {
         final EnvironmentEntry lookedUpEntry = environment.lookup(expr.name);
         if (lookedUpEntry == null) {
-            throw new RuntimeException("Unknown entry \"" + expr.name + "\"");
-        } else if (lookedUpEntry.getType() instanceof TLiteral) {
-            VarEntry varEntry = (VarEntry) lookedUpEntry;
-            functionCode.move(target, varEntry.varWrapper);
-            return new Expr(integer());
+            throw new RuntimeException(expr.name + " is not found in scope");
         } else {
-            // todo: support functions as vars
-            throw new RuntimeException("Function as name not supported \"" + expr.name + "\"");
+            if (lookedUpEntry instanceof NamedArgEntry) {
+                NamedArgEntry namedArgEntry = (NamedArgEntry) lookedUpEntry;
+                functionCode.move(target, namedArgEntry.varWrapper);
+            } else {
+                DefinitionEntry definitionEntry = (DefinitionEntry) lookedUpEntry;
+                functionCode.sget(definitionEntry.fieldId, target);
+            }
         }
     }
 
-    private static Expr generateNumber(final FunctionCode functionCode,
+    private static void generateNumber(final FunctionCode functionCode,
                                        final Expressions.Int expr,
-                                       final LocalWrapper target) {
-        functionCode.load(target, expr.number);
-        return new Expr(integer());
+                                       final DeferredLocal target) {
+        DeferredLocal result = functionCode.getOrCreateLocal(target.getPos() + 1, TypeId.INT);
+        functionCode.load(result, expr.number);
+        functionCode.call(Module.METHOD_INT_VALUE_OF, target, result);
     }
 
-    private static Expr generateBoolean(final FunctionCode functionCode,
+    private static void generateBoolean(final FunctionCode functionCode,
                                         final Expressions.Bool expr,
-                                        final LocalWrapper target) {
-        functionCode.load(target, expr.value ? 1 : 0);
-        return new Expr(bool());
+                                        final DeferredLocal target) {
+        DeferredLocal result = functionCode.getOrCreateLocal(target.getPos() + 1, TypeId.BOOLEAN);
+        functionCode.load(result, expr.value);
+        functionCode.call(Module.METHOD_BOOLEAN_VALUE_OF, target, result);
+
     }
 
-    private static void initBuiltins(final Environment baseEnvironment) {
-        baseEnvironment.add("+", new OperatorEntry(func(args(integer(), integer()), integer())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.add(target, args[0], args[1]);
-                return new Expr(integer());
+    private static TypeId[] convertToTypeId(List<Type> types) {
+        List<TypeId> result = new ArrayList<>();
+        for (Type type : types) {
+            result.add(convertToTypeId(type));
+        }
+        return result.toArray(new TypeId[types.size()]);
+    }
+
+    private static TypeId convertToTypeId(Type type) {
+        if (type instanceof TLiteral) {
+            return TypeId.OBJECT;
+        } else if (type instanceof TFunction) {
+            int argsCount = ((TFunction) type).args.size();
+            switch (argsCount) {
+                case 0:
+                    return Module.FUNCTION_TYPE_0;
+                case 1:
+                    return Module.FUNCTION_TYPE_1;
+                case 2:
+                    return Module.FUNCTION_TYPE_2;
+                default:
+                    throw new RuntimeException("Only 0, 1 and 2 arg lambdas are supported");
             }
-        });
-        baseEnvironment.add("-", new OperatorEntry(func(args(integer(), integer()), integer())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.subtract(target, args[0], args[1]);
-                return new Expr(integer());
-            }
-        });
-        baseEnvironment.add("*", new OperatorEntry(func(args(integer(), integer()), integer())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.multiply(target, args[0], args[1]);
-                return new Expr(integer());
-            }
-        });
-        baseEnvironment.add("/", new OperatorEntry(func(args(integer(), integer()), integer())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.divide(target, args[0], args[1]);
-                return new Expr(integer());
-            }
-        });
-        baseEnvironment.add("%", new OperatorEntry(func(args(integer(), integer()), integer())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.remainder(target, args[0], args[1]);
-                return new Expr(integer());
-            }
-        });
-        baseEnvironment.add("!=", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.NE;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add("==", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.EQ;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add(">=", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.GE;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add(">", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.GT;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add("<=", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.LE;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add("<", new OperatorEntry(func(args(integer(), integer()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                Comparison comparison = Comparison.LT;
-                return generateComparison(functionCode, target, comparison, args[0], args[1]);
-            }
-        });
-        baseEnvironment.add("and", new OperatorEntry(func(args(bool(), bool()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.and(target, args[0], args[1]);
-                return new Expr(bool());
-            }
-        });
-        baseEnvironment.add("or", new OperatorEntry(func(args(bool(), bool()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.or(target, args[0], args[1]);
-                return new Expr(bool());
-            }
-        });
-        baseEnvironment.add("xor", new OperatorEntry(func(args(bool(), bool()), bool())) {
-            @Override
-            public Expr apply(FunctionCode functionCode, LocalWrapper target, LocalWrapper... args) {
-                functionCode.xor(target, args[0], args[1]);
-                return new Expr(bool());
-            }
-        });
+        } else if (type instanceof Types.TVariable) {
+            System.out.println("Converting type variable!");
+            return TypeId.OBJECT;
+        } else {
+            throw new RuntimeException("Unknown type to convert to TypeId");
+        }
     }
 }

@@ -10,11 +10,11 @@ import static com.ride.inference.Types.bool;
 import static com.ride.inference.Types.integer;
 
 public class Expressions {
-    public static class Application extends Expression {
+    public static class Application extends Expression<Types.Type> {
         private final List<Expression> args;
-        public final Expression function;
+        public final Expression<Types.TFunction> function;
 
-        public Application(Expression function, List<Expression> args) {
+        public Application(Expression<Types.TFunction> function, List<Expression> args) {
             this.function = function;
             this.args = args;
         }
@@ -52,10 +52,11 @@ public class Expressions {
         }
     }
 
-    public static class Definition extends Expression {
-        private final String name;
+    public static class Definition extends Expression<Types.TFunction> {
+        public final String name;
+        public final Expression body;
+
         private final List<String> args;
-        private final Expression body;
 
         public Definition(String name, List<String> args, Expression body) {
             this.name = name;
@@ -63,13 +64,12 @@ public class Expressions {
             this.body = body;
         }
 
-        @Override
-        public String toString() {
-            return "Def{" +
-                    "name='" + name + '\'' +
-                    ", args=" + args +
-                    ", body=" + body +
-                    "} : " + type;
+        public String getArg(int i) {
+            return args.get(i);
+        }
+
+        public List<String> getArgs() {
+            return args;
         }
 
         @Override
@@ -82,20 +82,33 @@ public class Expressions {
                 argsTypes.add(argType);
             }
             Types.TFunction resultFunctionType = new Types.TFunction(argsTypes, body.infer(environment));
-            type = resultFunctionType.expose(environment);
+            type = (Types.TFunction) resultFunctionType.expose(environment);
             environment.pop();
             environment.define(name, type);
             return resultFunctionType;
         }
+
+        @Override
+        public String toString() {
+            return "Def{" +
+                    "name='" + name + '\'' +
+                    ", args=" + args +
+                    ", body=" + body +
+                    "} : " + type;
+        }
     }
 
-    public static class Lambda extends Expression {
+    public static class Lambda extends Expression<Types.TFunction> {
         public final List<String> args;
         public final Expression body;
 
         public Lambda(List<String> args, Expression body) {
             this.args = args;
             this.body = body;
+        }
+
+        public String getArg(int i) {
+            return args.get(i);
         }
 
         @Override
@@ -116,7 +129,7 @@ public class Expressions {
                 argsTypes.add(argType);
             }
             Types.TFunction resultFunctionType = new Types.TFunction(argsTypes, body.infer(environment));
-            type = resultFunctionType.expose(environment);
+            type = (Types.TFunction) resultFunctionType.expose(environment);
             environment.pop();
             return resultFunctionType;
         }
@@ -156,7 +169,7 @@ public class Expressions {
         }
     }
 
-    public static class Int extends Expression {
+    public static class Int extends Expression<Types.TLiteral> {
         public final int number;
 
         public Int(int number) {
@@ -170,13 +183,11 @@ public class Expressions {
 
         @Override
         Types.Type infer(Environment env) {
-            Types.Type resultType = integer();
-            type = resultType;
-            return resultType;
+            return type = integer(); // assignment is expression
         }
     }
 
-    public static class Bool extends Expression {
+    public static class Bool extends Expression<Types.TLiteral> {
         public final boolean value;
 
         public Bool(boolean value) {
@@ -190,9 +201,7 @@ public class Expressions {
 
         @Override
         Types.Type infer(Environment env) {
-            Types.Type resultType = bool();
-            type = resultType;
-            return resultType;
+            return type = bool(); // assignment is expression
         }
     }
 

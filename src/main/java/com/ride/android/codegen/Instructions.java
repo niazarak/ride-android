@@ -27,11 +27,11 @@ public class Instructions {
         }
     }
 
-    static class LoadInstruction implements Instruction {
+    static class LoadInstruction<T> implements Instruction {
         final LocalWrapper dest;
-        final int constant;
+        final T constant;
 
-        LoadInstruction(LocalWrapper dest, int constant) {
+        LoadInstruction(LocalWrapper<T> dest, T constant) {
             this.dest = dest;
             this.constant = constant;
         }
@@ -39,6 +39,7 @@ public class Instructions {
         @Override
         public void generate(Code code) {
             code.loadConstant(dest.getRealLocal(), constant);
+
         }
     }
 
