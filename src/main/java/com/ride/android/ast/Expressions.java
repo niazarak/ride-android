@@ -9,6 +9,9 @@ import java.util.List;
 import static com.ride.inference.Types.bool;
 import static com.ride.inference.Types.integer;
 
+/**
+ * Expressions that are supported in the language
+ */
 public class Expressions {
     public static class Application extends Expression<Types.Type> {
         private final List<Expression> args;

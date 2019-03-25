@@ -5,8 +5,16 @@ import com.ride.android.parser.SExpressions;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * This class produces abstract syntax tree from nested s-expressions
+ */
 public class Ast {
 
+    /**
+     * Main method
+     * Input is s-expressions
+     * Output is undecorated AST
+     */
     public static List<Expression> ast(List<SExpressions.SExpression> nodes) {
         List<Expression> expressions = new ArrayList<>();
         for (SExpressions.SExpression node : nodes) {

@@ -6,6 +6,11 @@ import java.util.regex.Pattern;
 
 public class Tokenizer {
 
+    /**
+     * Main method
+     * Input is program string
+     * Output is tokenized program
+     */
     public static List<Token> tokenize(final String input) {
         // System.out.println("Initial input: " + input);
         // insert spaces & split

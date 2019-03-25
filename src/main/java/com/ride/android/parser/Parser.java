@@ -17,6 +17,23 @@ public class Parser {
         }
     }
 
+    /**
+     * Main method
+     * Input is list of raw tokens
+     * Output is list of nested s-expressions
+     */
+    public static List<SExpressions.SExpression> parse(List<Tokenizer.Token> tokens) {
+        tokens.add(0, Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_OPEN, "("));
+        tokens.add(Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_CLOSE, ")"));
+        ParseResult parseResult = parse(tokens, 0, 0);
+        if (parseResult.offset != tokens.size()) {
+            throw new RuntimeException("Invalid syntax");
+        }
+        List<SExpressions.SExpression> nodes = ((SExpressions.ListSExpr) parseResult.node.get(0)).getAll();
+        System.out.println("Parsed node: " + nodes.toString());
+        return nodes;
+    }
+
     private static ParseResult parse(List<Tokenizer.Token> tokens, int offset, int depth) {
         SExpressions.ListSExpr list = new SExpressions.ListSExpr();
         int i = offset;
@@ -47,18 +64,6 @@ public class Parser {
             i++;
         }
         return new ParseResult(list, i);
-    }
-
-    static public List<SExpressions.SExpression> parse(List<Tokenizer.Token> tokens) {
-        tokens.add(0, Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_OPEN, "("));
-        tokens.add(Tokenizer.Token.makeToken(Tokenizer.TokenType.PAREN_CLOSE, ")"));
-        ParseResult parseResult = parse(tokens, 0, 0);
-        if (parseResult.offset != tokens.size()) {
-            throw new RuntimeException("Invalid syntax");
-        }
-        List<SExpressions.SExpression> nodes = ((SExpressions.ListSExpr) parseResult.node.get(0)).getAll();
-        System.out.println("Parsed node: " + nodes.toString());
-        return nodes;
     }
 
 
