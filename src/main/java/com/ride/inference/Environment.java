@@ -89,6 +89,6 @@ public final class Environment {
     }
 
     public Types.TVariable newvar() {
-        return new Types.TVariable(String.valueOf((char) ((i++ % 26) + 97)));
+        return new Types.TVariable(String.valueOf((char) ((i++ % 26) + 97) + Character.forDigit(i / 26,10)));
     }
 }

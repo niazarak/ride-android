@@ -1,16 +1,19 @@
-package com.ride.inference;
+package com.ride.android.ast;
 
+import com.ride.inference.Environment;
+import com.ride.inference.Types;
 import org.junit.Before;
 import org.junit.Test;
 
-import static com.ride.inference.Expressions.*;
+import java.util.Arrays;
+import java.util.List;
+
 import static com.ride.inference.Types.*;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
-@Deprecated
-public class InferenceTest {
+public class TypeCheckerTest {
     private Environment environment;
 
     @Before
@@ -21,7 +24,7 @@ public class InferenceTest {
     @Test
     public void testIdentity() {
         // given
-        Expressions.Expression e = new Expressions.EAbstraction(
+        Expression e = lambda(
                 "x", var("x")
         );
 
@@ -38,9 +41,9 @@ public class InferenceTest {
     @Test
     public void testApplicationOfAbstractions() {
         // given
-        Expressions.Expression e = new Expressions.EApplication(
-                new Expressions.EAbstraction("x", var("x")),
-                new Expressions.EAbstraction("y", var("y"))
+        Expression e = apply(
+                lambda("x", var("x")),
+                lambda("y", var("y"))
         );
 
         // when
@@ -50,10 +53,10 @@ public class InferenceTest {
         assertThat(result, instanceOf(Types.TFunction.class));
     }
 
-    @Test(expected = Expressions.InferException.class)
+    @Test(expected = RuntimeException.class)
     public void testUnboundVar() {
         // given
-        Expressions.Expression e = var("x");
+        Expression e = var("x");
 
         // when
         e.infer(environment);
@@ -64,7 +67,7 @@ public class InferenceTest {
     @Test
     public void testVar() {
         // given
-        Expressions.Expression e = var("x");
+        Expression e = var("x");
         environment.define("x", typeVar("t"));
 
         // when
@@ -78,7 +81,7 @@ public class InferenceTest {
     public void testPlusWithTwoNumbers() {
         // given
         environment.define("+", func(integer(), func(integer(), integer()))); // int -> int -> int
-        Expressions.Expression e = apply(
+        Expression e = apply(
                 apply(var("+"), literal(2)), literal(2)
         );
 
@@ -93,7 +96,7 @@ public class InferenceTest {
     public void testApplicationOfPlus() {
         // given
         environment.define("+", func(integer(), func(integer(), integer()))); // int -> int -> int
-        Expressions.Expression e = lambda("y",
+        Expression e = lambda("y",
                 lambda("x", apply(
                         apply(var("+"), var("x")),
                         var("y")
@@ -111,9 +114,9 @@ public class InferenceTest {
     @Test
     public void testApplicationOfNaryPlus() {
         // given
-        environment.define("+", func(args(integer(), integer()), integer())); // [int x int] -> int
-        Expressions.Expression e = lambda(boundVars("x", "y"),
-                apply(var("+"), applyArgs(var("x"), var("y")))
+        environment.define("+", func(list(integer(), integer()), integer())); // [int x int] -> int
+        Expression e = lambda(list("x", "y"),
+                apply(var("+"), list(var("x"), var("y")))
         );
 
         // when
@@ -121,19 +124,19 @@ public class InferenceTest {
 
         // then
         assertThat(result, instanceOf(Types.TFunction.class));
-        assertEquals(result, func(args(integer(), integer()), integer()));
+        assertEquals(result, func(list(integer(), integer()), integer()));
     }
 
     @Test
     public void testApplicationOfNaryPlus2() {
         // given
-        environment.define("+", func(args(integer(), integer()), integer())); // [int x int] -> int
-        Expressions.Expression e = apply(
+        environment.define("+", func(list(integer(), integer()), integer())); // [int x int] -> int
+        Expression e = apply(
                 lambda(
-                        boundVars("y", "x"),
-                        apply(var("+"), applyArgs(var("x"), var("y")))
+                        list("y", "x"),
+                        apply(var("+"), list(var("x"), var("y")))
                 ),
-                applyArgs(literal(2), literal(2))
+                list(literal(2), literal(2))
         );
 
         // when
@@ -142,5 +145,34 @@ public class InferenceTest {
         // then
         assertThat(result, instanceOf(Types.TLiteral.class));
         assertEquals(result, integer());
+    }
+
+    // expression helpers
+    public static Expression lambda(String arg, Expression body) {
+        return new Expressions.Lambda(list(arg), body);
+    }
+
+    public static Expression lambda(List<String> args, Expression body) {
+        return new Expressions.Lambda(args, body);
+    }
+
+    public static Expressions.Application apply(Expression fun, Expression arg) {
+        return new Expressions.Application(fun, list(arg));
+    }
+
+    public static Expressions.Application apply(Expression fun, List<Expression> args) {
+        return new Expressions.Application(fun, args);
+    }
+
+    public static Expressions.Int literal(int value) {
+        return new Expressions.Int(value);
+    }
+
+    public static Expressions.Variable var(String y) {
+        return new Expressions.Variable(y);
+    }
+
+    public static <T> List<T> list(T... args) {
+        return Arrays.asList(args);
     }
 }
