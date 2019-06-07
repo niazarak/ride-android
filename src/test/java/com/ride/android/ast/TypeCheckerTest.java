@@ -147,6 +147,35 @@ public class TypeCheckerTest {
         assertEquals(result, integer());
     }
 
+    @Test
+    public void testSimpleLet() {
+        // given
+        Expression e = let(
+                "f", lambda("x", literal(5)),
+                apply(var("f"), var("f"))
+        );
+
+        // when
+        Types.Type result = e.infer(environment).expose(environment);
+
+        // then
+        assertEquals(Types.integer(), result);
+    }
+
+    @Test
+    public void testIdentityLet() {
+        // given
+        Expression e = let(
+                "id", lambda("x", var("x")),
+                apply(var("id"), literal(2))
+        );
+        // when
+        Types.Type result = e.infer(environment).expose(environment);
+
+        // then
+        assertEquals(result, integer());
+    }
+
     // expression helpers
     public static Expression lambda(String arg, Expression body) {
         return new Expressions.Lambda(list(arg), body);
@@ -162,6 +191,10 @@ public class TypeCheckerTest {
 
     public static Expressions.Application apply(Expression fun, List<Expression> args) {
         return new Expressions.Application(fun, args);
+    }
+
+    public static Expressions.Let let(String var, Expression varExpr, Expression body) {
+        return new Expressions.Let(var, varExpr, body);
     }
 
     public static Expressions.Int literal(int value) {

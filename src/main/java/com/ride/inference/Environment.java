@@ -3,13 +3,25 @@ package com.ride.inference;
 import java.util.*;
 
 public final class Environment {
-    private final LinkedList<Map<String, Types.Type>> env = new LinkedList<>();
+
+    private final LinkedList<Map<String, Types.TScheme>> env = new LinkedList<>();
     private final Map<Types.Type, Types.Type> constraints = new HashMap<>();
 
     private int i = 0;
 
     public Environment() {
         push();
+    }
+
+    public interface EnvironmentHandle<T> {
+        T handle(Environment environment);
+    }
+
+    public <T> T scoped(EnvironmentHandle<T> handler) {
+        push();
+        T result = handler.handle(this);
+        pop();
+        return result;
     }
 
     public void push() {
@@ -20,10 +32,10 @@ public final class Environment {
         env.removeLast();
     }
 
-    public Types.Type lookup(String name) {
-        ListIterator<Map<String, Types.Type>> envIterator = env.listIterator(env.size());
+    public Types.TScheme lookup(String name) {
+        ListIterator<Map<String, Types.TScheme>> envIterator = env.listIterator(env.size());
         while (envIterator.hasPrevious()) {
-            Map<String, Types.Type> localScope = envIterator.previous();
+            Map<String, Types.TScheme> localScope = envIterator.previous();
             if (localScope.containsKey(name)) {
                 return localScope.get(name);
             }
@@ -37,6 +49,12 @@ public final class Environment {
             res = constraints.get(res);
         }
         return res;
+    }
+
+    public Types.TScheme generalize(Types.Type type) {
+        Set<Types.Type> ftv = freeVariables();
+        ftv.removeAll(type.freeVariables());
+        return new Types.TScheme<>(type, new ArrayList<>(ftv));
     }
 
     public boolean unify(Types.Type a, Types.Type b) {
@@ -85,10 +103,25 @@ public final class Environment {
     }
 
     public void define(String name, Types.Type type) {
+        env.getLast().put(name, new Types.TScheme<>(type, new ArrayList<>()));
+    }
+
+    public void define(String name, Types.TScheme type) {
         env.getLast().put(name, type);
     }
 
+
     public Types.TVariable newvar() {
-        return new Types.TVariable(String.valueOf((char) ((i++ % 26) + 97) + Character.forDigit(i / 26,10)));
+        return new Types.TVariable(String.valueOf((char) ((i++ % 26) + 97)) + Character.forDigit(i / 26, 10));
+    }
+
+    private Set<Types.Type> freeVariables() {
+        Set<Types.Type> ftv = new HashSet<>();
+        for (Map<String, Types.TScheme> scope : env) {
+            for (Types.TScheme type : scope.values()) {
+                ftv.addAll(type.freeVars);
+            }
+        }
+        return ftv;
     }
 }

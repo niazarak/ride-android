@@ -3,7 +3,7 @@ package com.ride.android.codegen;
 import com.android.dx.Local;
 
 /**
- * Wraps function arguments - locals that are already "generated" -
+ * Wraps function arguments - locals that are already "generated"
  */
 class ParamLocal<T> implements LocalWrapper<T> {
     private com.android.dx.Local<T> realLocal;

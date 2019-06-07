@@ -138,6 +138,29 @@ public class Expressions {
         }
     }
 
+    public static class Let extends Expression {
+        private final String var;
+        private final Expression varExpr;
+        private final Expression body;
+
+        public Let(String var, Expression varExpr, Expression body) {
+            this.var = var;
+            this.varExpr = varExpr;
+            this.body = body;
+        }
+
+        @Override
+        Types.Type infer(Environment env) {
+            Types.Type varExprType = varExpr.infer(env);
+            return env.scoped(scopedEnv -> {
+                scopedEnv.define(var, scopedEnv.generalize(varExprType));
+                Types.Type infer = body.infer(scopedEnv);
+                type = infer.expose(scopedEnv);
+                return infer;
+            });
+        }
+    }
+
     public static class IfExpr extends Expression {
         public final Expression condition, ifBranch, elseBranch;
 
@@ -222,12 +245,12 @@ public class Expressions {
 
         @Override
         Types.Type infer(Environment environment) {
-            Types.Type varType = environment.lookup(name);
+            Types.TScheme varType = environment.lookup(name);
             if (varType == null) {
                 throw new RuntimeException(name + " is not found in environment");
             }
-            type = varType.expose(environment);
-            return varType;
+            type = varType.instantiate(environment);
+            return type;
         }
     }
 }
