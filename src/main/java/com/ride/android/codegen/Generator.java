@@ -7,10 +7,10 @@ import com.android.dx.TypeId;
 import com.ride.android.ast.Ast;
 import com.ride.android.ast.Expression;
 import com.ride.android.ast.Expressions;
-import com.ride.android.ast.TypeChecker;
+import com.ride.android.types.TypeChecker;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;
-import com.ride.inference.Types;
+import com.ride.android.types.Types;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -18,7 +18,7 @@ import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.ride.inference.Types.*;
+import static com.ride.android.types.Types.*;
 
 /**
  * Main generator class

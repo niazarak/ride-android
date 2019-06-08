@@ -1,7 +1,7 @@
 package com.ride.android;
 
 import com.ride.android.ast.Ast;
-import com.ride.android.ast.TypeChecker;
+import com.ride.android.types.TypeChecker;
 import com.ride.android.codegen.Generator;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;

@@ -1,14 +1,14 @@
-package com.ride.android.ast;
+package com.ride.android.types;
 
-import com.ride.inference.Environment;
-import com.ride.inference.Types;
+import com.ride.android.ast.Expression;
+import com.ride.android.ast.Expressions;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
 
-import static com.ride.inference.Types.*;
+import static com.ride.android.types.Types.*;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;

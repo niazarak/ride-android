@@ -1,12 +1,13 @@
-package com.ride.android.ast;
+package com.ride.android.types;
 
+import com.ride.android.ast.Ast;
+import com.ride.android.ast.Expression;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;
-import com.ride.inference.Environment;
 
 import java.util.List;
 
-import static com.ride.inference.Types.*;
+import static com.ride.android.types.Types.*;
 
 /**
  * Infers types for each expression in AST.

@@ -1,7 +1,7 @@
 package com.ride.android.ast;
 
-import com.ride.inference.Environment;
-import com.ride.inference.Types;
+import com.ride.android.types.Environment;
+import com.ride.android.types.Types;
 
 /**
  * Base class for AST expression
@@ -13,7 +13,7 @@ public abstract class Expression<T extends Types.Type> {
      * Infers type for this expression
      * Must implement Hindley Milner typing rules
      */
-    abstract Types.Type infer(Environment env);
+    public abstract Types.Type infer(Environment env);
 
     public T getType() {
         return type;

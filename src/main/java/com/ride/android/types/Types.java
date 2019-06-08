@@ -1,4 +1,4 @@
-package com.ride.inference;
+package com.ride.android.types;
 
 import java.util.*;
 

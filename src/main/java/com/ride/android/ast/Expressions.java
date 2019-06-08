@@ -1,13 +1,13 @@
 package com.ride.android.ast;
 
-import com.ride.inference.Environment;
-import com.ride.inference.Types;
+import com.ride.android.types.Environment;
+import com.ride.android.types.Types;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.ride.inference.Types.bool;
-import static com.ride.inference.Types.integer;
+import static com.ride.android.types.Types.bool;
+import static com.ride.android.types.Types.integer;
 
 /**
  * Expressions that are supported in the language
@@ -39,7 +39,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             Types.Type functionType = function.infer(env);
             List<Types.Type> argsType = new ArrayList<>();
             for (Expression arg : args) {
@@ -76,7 +76,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment environment) {
+        public Types.Type infer(Environment environment) {
             environment.push();
             List<Types.Type> argsTypes = new ArrayList<>();
             for (String arg : args) {
@@ -123,7 +123,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment environment) {
+        public Types.Type infer(Environment environment) {
             environment.push();
             List<Types.Type> argsTypes = new ArrayList<>();
             for (String arg : args) {
@@ -150,7 +150,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             Types.Type varExprType = varExpr.infer(env);
             return env.scoped(scopedEnv -> {
                 scopedEnv.define(var, scopedEnv.generalize(varExprType));
@@ -173,7 +173,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             return env.scoped(scopedEnv -> {
                 Types.Type varTmpType = scopedEnv.newvar();
                 scopedEnv.define(var, varTmpType);
@@ -210,7 +210,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             Types.Type conditionType = condition.infer(env);
             if (!conditionType.expose(env).equals(bool())) {
                 throw new RuntimeException("Condition must be boolean");
@@ -238,7 +238,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             return type = integer(); // assignment is expression
         }
     }
@@ -256,7 +256,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment env) {
+        public Types.Type infer(Environment env) {
             return type = bool(); // assignment is expression
         }
     }
@@ -274,7 +274,7 @@ public class Expressions {
         }
 
         @Override
-        Types.Type infer(Environment environment) {
+        public Types.Type infer(Environment environment) {
             Types.TScheme varType = environment.lookup(name);
             if (varType == null) {
                 throw new RuntimeException(name + " is not found in environment");
