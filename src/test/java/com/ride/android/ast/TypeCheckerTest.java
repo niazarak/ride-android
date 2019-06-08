@@ -176,6 +176,59 @@ public class TypeCheckerTest {
         assertEquals(result, integer());
     }
 
+    @Test
+    public void testFactorial() {
+        // given
+        environment.define(">", func(args(integer(), integer()), bool()));
+        environment.define("*", func(args(integer(), integer()), integer()));
+        environment.define("-", func(args(integer(), integer()), integer()));
+
+        Expression e = letrec("fact",
+                lambda("n",
+                        cond(apply(var(">"), list(var("n"), literal(0))), // if n > 0
+                                apply(var("*"), list(
+                                        var("n"),
+                                        apply(var("fact"), literal(1))
+                                )), // then n * factorial(n - 1)
+                                literal(1) // else 1
+                        )),
+                var("fact")
+        );
+
+        // when
+        Type type = e.infer(environment).expose(environment);
+
+        // then
+        assertEquals(func(integer(), integer()), type);
+    }
+
+    @Test
+    public void testFibonacci() {
+        // given
+        environment.define(">", func(args(integer(), integer()), bool()));
+        environment.define("-", func(args(integer(), integer()), integer()));
+        environment.define("+", func(args(integer(), integer()), integer()));
+
+        Expression e = letrec("fib",
+                lambda("n",
+                        cond(apply(var(">"), list(var("n"), literal(2))),
+                                apply(var("+"), list(
+                                        apply(var("fib"), apply(var("-"), list(var("n"), literal(1)))),
+                                        apply(var("fib"), apply(var("-"), list(var("n"), literal(2))))
+                                )),
+                                literal(1)
+                        )
+                ),
+                var("fib")
+        );
+
+        // when
+        Type type = e.infer(environment).expose(environment);
+
+        // then
+        assertEquals(func(integer(), integer()), type);
+    }
+
     // expression helpers
     public static Expression lambda(String arg, Expression body) {
         return new Expressions.Lambda(list(arg), body);
@@ -195,6 +248,14 @@ public class TypeCheckerTest {
 
     public static Expressions.Let let(String var, Expression varExpr, Expression body) {
         return new Expressions.Let(var, varExpr, body);
+    }
+
+    public static Expressions.LetRec letrec(String name, Expression recExpr, Expression body) {
+        return new Expressions.LetRec(name, recExpr, body);
+    }
+
+    public static Expressions.IfExpr cond(Expression cond, Expression thenExpr, Expression elseExpr) {
+        return new Expressions.IfExpr(cond, thenExpr, elseExpr);
     }
 
     public static Expressions.Int literal(int value) {

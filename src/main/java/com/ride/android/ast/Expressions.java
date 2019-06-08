@@ -161,6 +161,36 @@ public class Expressions {
         }
     }
 
+    public static class LetRec extends Expression {
+        private final String var;
+        private final Expression varExpr;
+        private final Expression body;
+
+        public LetRec(String var, Expression varExpr, Expression body) {
+            this.var = var;
+            this.varExpr = varExpr;
+            this.body = body;
+        }
+
+        @Override
+        Types.Type infer(Environment env) {
+            return env.scoped(scopedEnv -> {
+                Types.Type varTmpType = scopedEnv.newvar();
+                scopedEnv.define(var, varTmpType);
+
+                Types.Type varType = varExpr.infer(scopedEnv);
+                if (scopedEnv.unify(varTmpType, varType)) {
+                    scopedEnv.define(var, scopedEnv.generalize(varType));
+                    Types.Type bodyType = body.infer(scopedEnv);
+                    type = bodyType.expose(scopedEnv);
+                    return bodyType;
+                } else {
+                    throw new RuntimeException(varTmpType + " and " + varType + " cannot be unified");
+                }
+            });
+        }
+    }
+
     public static class IfExpr extends Expression {
         public final Expression condition, ifBranch, elseBranch;
 
