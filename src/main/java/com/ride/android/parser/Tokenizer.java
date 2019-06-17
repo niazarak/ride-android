@@ -95,7 +95,7 @@ public class Tokenizer {
         };
     }
 
-    static abstract class Token<R> {
+    public static abstract class Token<R> {
         abstract TokenType<R> getType();
 
         abstract R getValue();

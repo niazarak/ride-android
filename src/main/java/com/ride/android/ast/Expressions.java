@@ -139,9 +139,9 @@ public class Expressions {
     }
 
     public static class Let extends Expression {
-        private final String var;
-        private final Expression varExpr;
-        private final Expression body;
+        public final String var;
+        public final Expression varExpr;
+        public final Expression body;
 
         public Let(String var, Expression varExpr, Expression body) {
             this.var = var;
@@ -162,9 +162,9 @@ public class Expressions {
     }
 
     public static class LetRec extends Expression {
-        private final String var;
-        private final Expression varExpr;
-        private final Expression body;
+        public final String var;
+        public final Expression varExpr;
+        public final Expression body;
 
         public LetRec(String var, Expression varExpr, Expression body) {
             this.var = var;
@@ -225,7 +225,10 @@ public class Expressions {
         }
     }
 
-    public static class Int extends Expression<Types.TLiteral> {
+    public static abstract class Literal extends Expression<Types.TLiteral> {
+    }
+
+    public static class Int extends Literal {
         public final int number;
 
         public Int(int number) {
@@ -243,7 +246,7 @@ public class Expressions {
         }
     }
 
-    public static class Bool extends Expression<Types.TLiteral> {
+    public static class Bool extends Literal {
         public final boolean value;
 
         public Bool(boolean value) {
