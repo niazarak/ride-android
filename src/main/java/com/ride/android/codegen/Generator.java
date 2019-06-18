@@ -7,9 +7,9 @@ import com.android.dx.TypeId;
 import com.ride.android.ast.Ast;
 import com.ride.android.ast.Expression;
 import com.ride.android.ast.Expressions;
-import com.ride.android.types.TypeChecker;
 import com.ride.android.parser.Parser;
 import com.ride.android.parser.Tokenizer;
+import com.ride.android.types.TypeChecker;
 import com.ride.android.types.Types;
 
 import java.io.FileOutputStream;
@@ -37,7 +37,10 @@ public class Generator {
         //final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
         //final String input = "2";
         //final String input = "((lambda (x y) (* x y)) 2 2)";
-        final String input = "((lambda () (* 2 2)))";
+        // final String input = "((lambda () (* 2 2)))";
+        // final String input = "(let (id (lambda (x) x)) 2)";
+        final String input = "(letrec (fac (lambda (n) (if (> n 0) (* n (fac (- n 1))) 1))) (fac 6))";
+
 
         FileOutputStream dexResult = new FileOutputStream("classes.dex");
 
@@ -84,7 +87,17 @@ public class Generator {
     private static void generateExpression(final FunctionCode functionCode,
                                            final Expression expression,
                                            final DeferredLocal target,
-                                           final CodegenEnvironment environment, Module module) {
+                                           final CodegenEnvironment environment,
+                                           final Module module) {
+        generateExpression(functionCode, expression, target, environment, module, null);
+    }
+
+    private static void generateExpression(final FunctionCode functionCode,
+                                           final Expression expression,
+                                           final DeferredLocal target,
+                                           final CodegenEnvironment environment,
+                                           final Module module,
+                                           final Recursion recursion) {
         if (expression instanceof Expressions.Int) {
             generateNumber(functionCode, (Expressions.Int) expression, target);
         } else if (expression instanceof Expressions.Bool) {
@@ -92,11 +105,15 @@ public class Generator {
         } else if (expression instanceof Expressions.Application) {
             generateApplication(functionCode, (Expressions.Application) expression, target, environment, module);
         } else if (expression instanceof Expressions.Lambda) {
-            generateLambda((Expressions.Lambda) expression, environment, functionCode, target, module);
+            generateLambda((Expressions.Lambda) expression, environment, functionCode, target, module, recursion);
         } else if (expression instanceof Expressions.IfExpr) {
             generateIf(functionCode, (Expressions.IfExpr) expression, target, environment, module);
         } else if (expression instanceof Expressions.Variable) {
             generateVarExpression(functionCode, (Expressions.Variable) expression, target, environment);
+        } else if (expression instanceof Expressions.Let) {
+            generateLet((Expressions.Let) expression, environment, functionCode, target, module);
+        } else if (expression instanceof Expressions.LetRec) {
+            generateLetRec((Expressions.LetRec) expression, environment, functionCode, target, module);
         } else {
             throw new RuntimeException("Top level symbols not supported");
         }
@@ -110,6 +127,22 @@ public class Generator {
 
         DefinitionEntry(FieldId fieldId) {
             this.fieldId = fieldId;
+        }
+    }
+
+    static class LetEntry implements EnvironmentEntry {
+        private final DeferredLocal varWrapper;
+
+        LetEntry(DeferredLocal varWrapper) {
+            this.varWrapper = varWrapper;
+        }
+    }
+
+    static class ThisEntry implements EnvironmentEntry {
+        private final TypeId typeId;
+
+        ThisEntry(TypeId typeId) {
+            this.typeId = typeId;
         }
     }
 
@@ -148,15 +181,27 @@ public class Generator {
         environment.add(definition.name, new DefinitionEntry(moduleDefinition.definitionField));
     }
 
+    private static class Recursion {
+        final String recVar;
+
+        Recursion(final String recVar) {
+            this.recVar = recVar;
+        }
+    }
+
     private static void generateLambda(final Expressions.Lambda lambda,
                                        final CodegenEnvironment environment,
                                        final FunctionCode functionCode,
                                        final DeferredLocal target,
-                                       final Module module) {
+                                       final Module module, final Recursion recursion) {
         // declare lambda
         TypeId[] args = convertToTypeId(lambda.getType().args);
         TypeId res = convertToTypeId(lambda.getType().res);
         LambdaCode lambdaCode = module.makeLambda(convertToTypeId(lambda.getType().res), args);
+
+        if (recursion != null) {
+            environment.add(recursion.recVar, new ThisEntry(lambdaCode.getLambdaType()));
+        }
 
         // register args
         environment.push();
@@ -174,6 +219,55 @@ public class Generator {
 
         // instantiate lambda object to target
         functionCode.newInstance(lambdaCode.getConstructorMethod(), target);
+    }
+
+    private static void generateLet(final Expressions.Let let,
+                                    final CodegenEnvironment environment,
+                                    final FunctionCode functionCode,
+                                    final DeferredLocal target,
+
+                                    final Module module) {
+        TypeId varType = convertToTypeId(let.varExpr.getType());
+        DeferredLocal varLocal = functionCode.getOrCreateLocal(target.getPos() + 1, varType);
+        generateExpression(functionCode, let.varExpr, varLocal, environment, module);
+
+        environment.push();
+        environment.add(let.var, new LetEntry(varLocal));
+
+        // this is needed because local vars position must monotonically increase
+        TypeId bodyType = convertToTypeId(let.getType());
+        DeferredLocal tmpTargetLocal = functionCode.getOrCreateLocal(target.getPos() + 2, bodyType);
+
+        generateExpression(functionCode, let.body, tmpTargetLocal, environment, module);
+        functionCode.move(target, tmpTargetLocal);
+
+        environment.pop();
+    }
+
+    private static void generateLetRec(final Expressions.LetRec letRec,
+                                       final CodegenEnvironment environment,
+                                       final FunctionCode functionCode,
+                                       final DeferredLocal target,
+
+                                       final Module module) {
+        TypeId varType = convertToTypeId(letRec.varExpr.getType());
+        DeferredLocal varLocal = functionCode.getOrCreateLocal(target.getPos() + 1, varType);
+        environment.push();
+        generateExpression(functionCode, letRec.varExpr, varLocal, environment, module, new Recursion(letRec.var));
+        environment.pop();
+
+
+        environment.push();
+        environment.add(letRec.var, new LetEntry(varLocal));
+
+        // this is needed because local vars position must monotonically increase
+        TypeId bodyType = convertToTypeId(letRec.getType());
+        DeferredLocal tmpTargetLocal = functionCode.getOrCreateLocal(target.getPos() + 2, bodyType);
+
+        generateExpression(functionCode, letRec.body, tmpTargetLocal, environment, module);
+        functionCode.move(target, tmpTargetLocal);
+
+        environment.pop();
     }
 
     public static void generateIf(final FunctionCode functionCode,
@@ -255,9 +349,17 @@ public class Generator {
             if (lookedUpEntry instanceof NamedArgEntry) {
                 NamedArgEntry namedArgEntry = (NamedArgEntry) lookedUpEntry;
                 functionCode.move(target, namedArgEntry.varWrapper);
-            } else {
+            } else if (lookedUpEntry instanceof LetEntry) {
+                LetEntry letEntry = (LetEntry) lookedUpEntry;
+                functionCode.move(target, letEntry.varWrapper);
+            } else if (lookedUpEntry instanceof DefinitionEntry) {
                 DefinitionEntry definitionEntry = (DefinitionEntry) lookedUpEntry;
                 functionCode.sget(definitionEntry.fieldId, target);
+            } else if (lookedUpEntry instanceof ThisEntry) { // this shit does not work on nested letrecs
+                ThisEntry thisEntry = (ThisEntry) lookedUpEntry;
+                functionCode.move(target, functionCode.getThis(thisEntry.typeId));
+            } else {
+                throw new RuntimeException();
             }
         }
     }

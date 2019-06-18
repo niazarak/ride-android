@@ -45,6 +45,12 @@ public class Ast {
                 case "define": {
                     return transformToDefine(listExpr, depth);
                 }
+                case "let": {
+                    return transformToLet(listExpr, depth);
+                }
+                case "letrec": {
+                    return transformToLetrec(listExpr, depth);
+                }
                 case "lambda": {
                     return transformToLambda(listExpr, depth);
                 }
@@ -125,4 +131,43 @@ public class Ast {
         }
         return new Expressions.Lambda(args, transform(expr.get(2), depth + 1));
     }
+
+    private static Expressions.Let transformToLet(SExpressions.ListSExpr expr, int depth) {
+        if (expr.getAll().size() != 3) {
+            throw new RuntimeException("Incorrect let: should have 3 children");
+        }
+        if (!(expr.get(1) instanceof SExpressions.ListSExpr)) {
+            throw new RuntimeException("Incorrect let: should specify definition in list");
+        }
+        SExpressions.ListSExpr defn = (SExpressions.ListSExpr) expr.get(1);
+        if (defn.getAll().size() != 2) {
+            throw new RuntimeException("Incorrect let: definition should contain a symbol and an expression");
+        }
+        if (!(defn.get(0) instanceof SExpressions.Symbol)) {
+            throw new RuntimeException("Incorrect let: definition first expression should be symbol");
+        }
+        final String var = ((SExpressions.Symbol) defn.get(0)).name;
+
+        return new Expressions.Let(var, transform(defn.get(1), depth + 1), transform(expr.get(2), depth + 1));
+    }
+
+    private static Expressions.LetRec transformToLetrec(SExpressions.ListSExpr expr, int depth) {
+        if (expr.getAll().size() != 3) {
+            throw new RuntimeException("Incorrect letrec: should have 3 children");
+        }
+        if (!(expr.get(1) instanceof SExpressions.ListSExpr)) {
+            throw new RuntimeException("Incorrect letrec: should specify definition in list");
+        }
+        SExpressions.ListSExpr defn = (SExpressions.ListSExpr) expr.get(1);
+        if (defn.getAll().size() != 2) {
+            throw new RuntimeException("Incorrect letrec: definition should contain a symbol and an expression");
+        }
+        if (!(defn.get(0) instanceof SExpressions.Symbol)) {
+            throw new RuntimeException("Incorrect letrec: definition first expression should be symbol");
+        }
+        final String var = ((SExpressions.Symbol) defn.get(0)).name;
+
+        return new Expressions.LetRec(var, transform(defn.get(1), depth + 1), transform(expr.get(2), depth + 1));
+    }
+
 }

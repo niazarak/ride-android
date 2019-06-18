@@ -53,7 +53,8 @@ public class TypeChecker {
         // final String input = "(+ 12 (if (> 5 10) 1 0))";
         // final String input = "(define (funA a) (+ a 7)) (define (funB b) (- b (funA 2))) (funB 2)";
         // final String input = "(+ 12 (if (> 5 10) 1 0))(+ 2 2)(+ 2 (if (> 5 10) 1 0))";
-        final String input = "((lambda (a) (+ a 7)) 2)";
+        // final String input = "((lambda (a) (+ a 7)) 2)";
+        final String input = "(letrec (fac (lambda (n) (if (> n 0) (* n (fac (- n 1))) 1))) (fac 6))";
 
         List<Expression> ast = Ast.ast(Parser.parse(Tokenizer.tokenize(input)));
         System.out.println("Ast: ");

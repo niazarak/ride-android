@@ -159,6 +159,15 @@ public class Expressions {
                 return infer;
             });
         }
+
+        @Override
+        public String toString() {
+            return "Let{" +
+                    "var='" + var + '\'' +
+                    ", varExpr=" + varExpr +
+                    ", body=" + body +
+                    "} : " + type;
+        }
     }
 
     public static class LetRec extends Expression {
@@ -182,12 +191,25 @@ public class Expressions {
                 if (scopedEnv.unify(varTmpType, varType)) {
                     scopedEnv.define(var, scopedEnv.generalize(varType));
                     Types.Type bodyType = body.infer(scopedEnv);
+
+                    // ADDITIONAL PASS SO REC VAR GETS THE RIGHT TYPE
+                    varExpr.infer(scopedEnv);
+
                     type = bodyType.expose(scopedEnv);
                     return bodyType;
                 } else {
                     throw new RuntimeException(varTmpType + " and " + varType + " cannot be unified");
                 }
             });
+        }
+
+        @Override
+        public String toString() {
+            return "LetRec{" +
+                    "var='" + var + '\'' +
+                    ", varExpr=" + varExpr +
+                    ", body=" + body +
+                    "} : " + type;
         }
     }
 
